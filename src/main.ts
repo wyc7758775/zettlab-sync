@@ -2,7 +2,7 @@
  * Derived from Remotely Save commit 7ca2d192552819777318d9d521dca45450934b4f
  * (Apache-2.0). Modified by Zettlab.
  */
-import { getLanguage, Notice, Plugin } from "obsidian";
+import { getLanguage, Notice, Plugin, requestUrl } from "obsidian";
 import type { InternalDBs } from "./localdb";
 import type { RemotelySavePluginSettings, SyncTriggerSourceType } from "./baseTypes";
 import { messyConfigToNormal, normalConfigToMessy } from "./configPersist";
@@ -21,6 +21,14 @@ import { ZettlabSyncSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, normalizeSettings } from "./settingsModel";
 import { syncer } from "./sync";
 import { getSyncOverview, type SyncOverview } from "./syncOverview";
+import {
+  applyBootstrapPayload,
+  buildBootstrapClaimRequest,
+  buildBootstrapCompletionRequest,
+  normalizeBootstrapPayload,
+  normalizeDirectBootstrapPayload,
+  retryBootstrapConnection,
+} from "./bootstrap";
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -60,7 +68,7 @@ export default class ZettlabSyncPlugin extends Plugin {
       typeof lastFailedSyncAt === "number" ? lastFailedSyncAt : undefined;
 
     this.statusBar = this.addStatusBarItem();
-    this.setStatus(localize("statusReady"));
+    this.setIdleStatus();
     this.addSettingTab(new ZettlabSyncSettingTab(this));
     this.addCommand({
       id: "sync-now",
@@ -74,6 +82,9 @@ export default class ZettlabSyncPlugin extends Plugin {
     });
     this.addRibbonIcon("refresh-cw", localize("ribbonSync"), () => {
       void this.syncRun("manual");
+    });
+    this.registerObsidianProtocolHandler("zettlab-sync", (params) => {
+      void this.bootstrapFromZettlabMemo(params);
     });
     this.registerEvent(
       this.app.vault.on("modify", () => {
@@ -98,7 +109,88 @@ export default class ZettlabSyncPlugin extends Plugin {
     this.configureAutoSync();
   }
 
-  async testConnection(): Promise<boolean> {
+  async bootstrapFromZettlabMemo(params: Record<string, string>): Promise<boolean> {
+    const directPayload = normalizeDirectBootstrapPayload(params);
+    const claimRequest = directPayload ? null : buildBootstrapClaimRequest(params);
+    const reportCompletion = async (status: "ok" | "failed"): Promise<void> => {
+      const completionRequest = buildBootstrapCompletionRequest(params, status);
+      if (!completionRequest) return;
+      try {
+        await requestUrl({
+          url: completionRequest.url,
+          method: completionRequest.method,
+          throw: false,
+          headers: completionRequest.headers,
+        });
+      } catch (error) {
+        console.error("Zettlab bootstrap completion report failed", error);
+      }
+    };
+    if (!directPayload && !claimRequest) {
+      new Notice(localize("bootstrapInvalid"));
+      return false;
+    }
+
+    let payload = directPayload;
+    if (!payload && claimRequest) {
+      let rawPayload: unknown;
+      try {
+        const response = await requestUrl({
+          url: claimRequest.url,
+          method: claimRequest.method,
+          throw: false,
+          headers: claimRequest.headers,
+        });
+        if (response.status !== 200) {
+          new Notice(localize("bootstrapInvalid"));
+          return false;
+        }
+        rawPayload = response.json;
+      } catch (error) {
+        console.error("Zettlab bootstrap claim failed", error);
+        new Notice(localize("bootstrapInvalid"));
+        return false;
+      }
+      payload = normalizeBootstrapPayload(rawPayload);
+    }
+
+    if (!payload) {
+      await reportCompletion("failed");
+      new Notice(localize("bootstrapInvalid"));
+      return false;
+    }
+    const previous = this.settings;
+    this.settings = applyBootstrapPayload(previous, payload);
+    try {
+      await this.saveSettings();
+      if (!(await retryBootstrapConnection(() => this.testConnection(false)))) {
+        this.settings = previous;
+        await this.saveSettings();
+        this.setIdleStatus();
+        await reportCompletion("failed");
+        new Notice(localize("bootstrapRolledBack"));
+        return false;
+      }
+      await reportCompletion("ok");
+      new Notice(localize("connectionSuccess"));
+      // Connection is already proven and completion has been acknowledged.
+      // A transient first-sync failure must not discard valid credentials; the
+      // normal retry/manual sync paths can recover without making the user pair
+      // again.
+      await this.syncRun("auto_once_init");
+      return true;
+    } catch (error) {
+      console.error("Zettlab bootstrap apply failed", error);
+      this.settings = previous;
+      await this.saveSettings();
+      this.setIdleStatus();
+      await reportCompletion("failed");
+      new Notice(localize("bootstrapRolledBack"));
+      return false;
+    }
+  }
+
+  async testConnection(notify = true): Promise<boolean> {
     if (!this.isConfigured()) {
       new Notice(localize("connectFirst"));
       return false;
@@ -110,26 +202,28 @@ export default class ZettlabSyncPlugin extends Plugin {
     const connected = await remote.checkConnect((error: unknown) => {
       failure = errorMessage(error);
     });
-    new Notice(
-      connected
-        ? localize("connectionSuccess")
-        : localize("connectionFailed", {
-            reason: failure || localize("unknownError"),
-          })
-    );
+    if (notify) {
+      new Notice(
+        connected
+          ? localize("connectionSuccess")
+          : localize("connectionFailed", {
+              reason: failure || localize("unknownError"),
+            })
+      );
+    }
     return connected;
   }
 
-  async syncRun(source: SyncTriggerSourceType): Promise<void> {
+  async syncRun(source: SyncTriggerSourceType): Promise<boolean> {
     if (this.isSyncing) {
       if (source === "manual") new Notice(localize("syncInProgress"));
-      return;
+      return false;
     }
     if (!this.isConfigured()) {
       if (source === "manual") {
         new Notice(localize("connectFirst"));
       }
-      return;
+      return false;
     }
 
     const local = new FakeFsLocal(
@@ -188,6 +282,7 @@ export default class ZettlabSyncPlugin extends Plugin {
       );
       this.setStatus(localize("statusSyncFailed"));
       new Notice(localize("syncFailed", { reason: failed }));
+      return false;
     } else {
       this.lastSuccessfulSyncAt = Date.now();
       await upsertLastSuccessSyncTimeByVault(
@@ -196,11 +291,16 @@ export default class ZettlabSyncPlugin extends Plugin {
         this.lastSuccessfulSyncAt
       );
       if (source === "manual") new Notice(localize("syncCompleted"));
+      return true;
     }
   }
 
   isConfigured(): boolean {
     return /^https?:\/\/.+/.test(this.settings.webdav.address);
+  }
+
+  private setIdleStatus(): void {
+    this.setStatus(localize(this.isConfigured() ? "statusReady" : "statusNotConnected"));
   }
 
   getSyncOverview(): SyncOverview {
