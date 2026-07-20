@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "node esbuild.config.mjs --watch",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "package:release": "node scripts/package-release.mjs",
+    "release:prepare": "npm run build && npm run package:release",
     "format": "npx @biomejs/biome check --write .",
     "clean": "npx rimraf main.js",
     "test": "mocha --import=tsx 'tests/zettlab/**/*.test.ts'"

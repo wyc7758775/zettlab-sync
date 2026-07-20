@@ -1,0 +1,29 @@
+# Intellij
+*.iml
+.idea
+
+# npm
+node_modules
+pnpm-lock.yaml
+
+# build
+main.js
+*.js.map
+
+# obsidian
+data.json
+
+# debug
+logs.txt
+
+# hidden files
+.*
+
+# Keep GitHub automation under version control. The broad rule above also
+# matches .github unless these paths are explicitly re-included.
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+
+# Release packages are generated locally and uploaded by GitHub Actions.
+release/

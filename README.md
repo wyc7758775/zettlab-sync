@@ -28,6 +28,16 @@ The build creates `main.js`. To test it in a disposable vault, copy `main.js`, `
 
 Then enable **Zettlab Sync** in Obsidian community plugins, set the WebDAV address and credentials, click **Test**, and use **Sync now** with a disposable note first.
 
+## Beta installation
+
+Each GitHub Release includes a `zettlab-sync-vX.Y.Z.zip` package that can be installed without using the Obsidian community plugin marketplace:
+
+1. Download the ZIP from the [GitHub Releases page](https://github.com/wyc7758775/zettlab-sync/releases).
+2. Close Obsidian and extract the ZIP into `<vault>/.obsidian/plugins/`. It contains the required `zettlab-sync/` plugin directory.
+3. Reopen Obsidian, enable Community plugins if needed, then enable **Zettlab Sync**.
+
+For a release, keep `package.json`, `manifest.json`, and `versions.json` on the same version, push the commit, then create and push a matching `vX.Y.Z` tag. GitHub Actions tests, packages, and publishes the release automatically.
+
 ## Safety
 
 - Back up a vault before first sync.

@@ -28,6 +28,16 @@ npm run build
 
 随后在 Obsidian 的第三方插件里启用 **Zettlab Sync**。自动接入完成前，可展开“手动接入与同步偏好”，填写 WebDAV 地址和 App 密码；用户名 `sync` 与 Basic 鉴权由插件固定。先点“检测连接”，再用一篇测试笔记执行“立即同步”。
 
+## 内测安装
+
+每个 GitHub Release 都会提供 `zettlab-sync-vX.Y.Z.zip`，内测用户无需经过 Obsidian 社区插件市场即可安装：
+
+1. 从 [GitHub Releases](https://github.com/wyc7758775/zettlab-sync/releases) 下载 ZIP。
+2. 退出 Obsidian，将 ZIP 解压到 `<vault>/.obsidian/plugins/`。压缩包已包含所需的 `zettlab-sync/` 目录。
+3. 重新打开 Obsidian，如有需要先允许第三方插件，再启用 **Zettlab Sync**。
+
+发布时，先让 `package.json`、`manifest.json` 和 `versions.json` 的版本保持一致并推送提交；然后创建并推送对应的 `vX.Y.Z` tag。GitHub Actions 会自动跑测试、打包并创建 Release。
+
 ## 注意事项
 
 - 第一次同步前先备份 vault。
