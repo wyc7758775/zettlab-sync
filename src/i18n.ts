@@ -13,11 +13,14 @@ export type MessageKey =
   | "syncCompleted"
   | "syncFailed"
   | "statusReady"
+  | "statusNotConnected"
   | "statusSyncing"
   | "statusSyncFailed"
   | "commandSyncNow"
   | "commandTestConnection"
-  | "ribbonSync";
+  | "ribbonSync"
+  | "bootstrapInvalid"
+  | "bootstrapRolledBack";
 
 const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
   en: {
@@ -30,11 +33,14 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     syncCompleted: "Zettlab Memo sync completed.",
     syncFailed: "Zettlab Memo sync failed: {{reason}}",
     statusReady: "Ready",
+    statusNotConnected: "Not connected",
     statusSyncing: "Syncing…",
     statusSyncFailed: "Sync failed",
     commandSyncNow: "Sync Zettlab Memo now",
     commandTestConnection: "Test Zettlab Memo service",
     ribbonSync: "Sync Zettlab Memo",
+    bootstrapInvalid: "This Zettlab Memo connection request is invalid or expired. Return to Zettlab Memo and retry.",
+    bootstrapRolledBack: "Automatic setup failed. Your previous Obsidian settings were restored.",
   },
   zh_CN: {
     connectionSuccess: "Zettlab Memo 服务关联成功",
@@ -45,11 +51,14 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     syncCompleted: "Zettlab Memo 同步完成。",
     syncFailed: "Zettlab Memo 同步失败：{{reason}}",
     statusReady: "已就绪",
+    statusNotConnected: "未关联",
     statusSyncing: "正在同步…",
     statusSyncFailed: "同步失败",
     commandSyncNow: "立即同步 Zettlab Memo",
     commandTestConnection: "检测 Zettlab Memo 服务",
     ribbonSync: "同步 Zettlab Memo",
+    bootstrapInvalid: "Zettlab Memo 关联请求无效或已过期，请返回 Zettlab Memo 重试。",
+    bootstrapRolledBack: "自动配置失败，已恢复原来的 Obsidian 设置。",
   },
   zh_TW: {
     connectionSuccess: "Zettlab Memo 服務關聯成功",
@@ -60,11 +69,14 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     syncCompleted: "Zettlab Memo 同步完成。",
     syncFailed: "Zettlab Memo 同步失敗：{{reason}}",
     statusReady: "已就緒",
+    statusNotConnected: "未關聯",
     statusSyncing: "正在同步…",
     statusSyncFailed: "同步失敗",
     commandSyncNow: "立即同步 Zettlab Memo",
     commandTestConnection: "檢測 Zettlab Memo 服務",
     ribbonSync: "同步 Zettlab Memo",
+    bootstrapInvalid: "Zettlab Memo 關聯請求無效或已過期，請返回 Zettlab Memo 重試。",
+    bootstrapRolledBack: "自動設定失敗，已還原原本的 Obsidian 設定。",
   },
 };
 
