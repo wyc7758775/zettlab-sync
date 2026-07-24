@@ -10,14 +10,16 @@ export interface ZettlabBootstrapPayload {
 }
 
 export interface BootstrapRequest {
-  mode: "desktop";
+  mode: "desktop" | "remote";
   url: string;
   method: "GET";
   headers: Record<string, string>;
 }
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
-const CONNECTION_RETRY_DELAYS_MS = [0, 500, 1_000, 2_000, 4_000, 4_000, 4_000] as const;
+const CONNECTION_RETRY_DELAYS_MS = [
+  0, 500, 1_000, 2_000, 4_000, 4_000, 4_000,
+] as const;
 
 export const retryBootstrapConnection = async (
   check: () => Promise<boolean>,
@@ -37,10 +39,45 @@ const parseDesktopEndpoint = (
   if (params.mode === "direct") return null;
   const token = params.token ?? "";
   const port = Number(params.port);
-  if (!TOKEN_PATTERN.test(token) || !Number.isInteger(port) || port < 1 || port > 65535) {
+  if (
+    !TOKEN_PATTERN.test(token) ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535
+  ) {
     return null;
   }
   return { token, port };
+};
+
+const parseRemoteEndpoint = (
+  params: Record<string, string>
+): { token: string; endpoint: string } | null => {
+  if (params.mode !== "remote" || !TOKEN_PATTERN.test(params.token ?? ""))
+    return null;
+  let endpoint: URL;
+  try {
+    endpoint = new URL(params.endpoint ?? "");
+  } catch {
+    return null;
+  }
+  const host = endpoint.hostname.toLowerCase();
+  if (
+    endpoint.protocol !== "https:" ||
+    (host !== "zettlab.com" && !host.endsWith(".zettlab.com")) ||
+    (endpoint.port !== "" && endpoint.port !== "443") ||
+    endpoint.pathname !== "/.zettlab/bootstrap" ||
+    endpoint.username !== "" ||
+    endpoint.password !== "" ||
+    endpoint.search !== "" ||
+    endpoint.hash !== ""
+  ) {
+    return null;
+  }
+  return {
+    token: params.token,
+    endpoint: endpoint.toString().replace(/\/$/, ""),
+  };
 };
 
 export const normalizeDirectBootstrapPayload = (
@@ -73,6 +110,10 @@ export const normalizeDirectBootstrapPayload = (
 export const buildBootstrapClaimUrl = (
   params: Record<string, string>
 ): string | null => {
+  const remote = parseRemoteEndpoint(params);
+  if (remote) {
+    return `${remote.endpoint}/claim?token=${encodeURIComponent(remote.token)}`;
+  }
   const endpoint = parseDesktopEndpoint(params);
   if (!endpoint) return null;
   return `http://127.0.0.1:${endpoint.port}/claim?token=${encodeURIComponent(endpoint.token)}`;
@@ -82,6 +123,10 @@ export const buildBootstrapCompletionUrl = (
   params: Record<string, string>,
   status: "ok" | "failed"
 ): string | null => {
+  const remote = parseRemoteEndpoint(params);
+  if (remote) {
+    return `${remote.endpoint}/complete?token=${encodeURIComponent(remote.token)}&status=${status}`;
+  }
   const endpoint = parseDesktopEndpoint(params);
   if (!endpoint) return null;
   return `http://127.0.0.1:${endpoint.port}/complete?token=${encodeURIComponent(endpoint.token)}&status=${status}`;
@@ -93,7 +138,7 @@ export const buildBootstrapClaimRequest = (
   const desktopUrl = buildBootstrapClaimUrl(params);
   if (!desktopUrl) return null;
   return {
-    mode: "desktop",
+    mode: params.mode === "remote" ? "remote" : "desktop",
     url: desktopUrl,
     method: "GET",
     headers: { "Cache-Control": "no-store" },
@@ -107,14 +152,16 @@ export const buildBootstrapCompletionRequest = (
   const desktopUrl = buildBootstrapCompletionUrl(params, status);
   if (!desktopUrl) return null;
   return {
-    mode: "desktop",
+    mode: params.mode === "remote" ? "remote" : "desktop",
     url: desktopUrl,
     method: "GET",
     headers: { "Cache-Control": "no-store" },
   };
 };
 
-export const normalizeBootstrapPayload = (raw: unknown): ZettlabBootstrapPayload | null => {
+export const normalizeBootstrapPayload = (
+  raw: unknown
+): ZettlabBootstrapPayload | null => {
   if (!raw || typeof raw !== "object") return null;
   const value = raw as Partial<ZettlabBootstrapPayload>;
   if (value.username !== "sync") return null;

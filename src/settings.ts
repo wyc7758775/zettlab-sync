@@ -51,17 +51,23 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       );
     new Setting(containerEl)
       .setName("同步策略")
-      .setDesc(getSyncScheduleSummary(this.plugin.settings.autoRunEveryMilliseconds));
+      .setDesc(
+        getSyncScheduleSummary(this.plugin.settings.autoRunEveryMilliseconds)
+      );
 
+    // biome-ignore lint/style/useConst: the action is rendered before its target details element
     let manualSettings!: HTMLDetailsElement;
     new Setting(containerEl)
       .setName("同步操作")
       .setDesc("无需修改配置即可手动同步或检测当前连接。")
       .addButton((button) =>
-        button.setButtonText("立即同步").setCta().onClick(async () => {
-          await this.plugin.syncRun("manual");
-          this.display();
-        })
+        button
+          .setButtonText("立即同步")
+          .setCta()
+          .onClick(async () => {
+            await this.plugin.syncRun("manual");
+            this.display();
+          })
       )
       .addButton((button) =>
         button.setButtonText("检测连接").onClick(async () => {
@@ -83,6 +89,9 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
     manualSettings.createEl("p", {
       text: "自动接入完成前、迁移旧配置或排障时，才需要填写地址和 App 密码。用户名固定为 sync，鉴权固定为 Basic。",
     });
+    manualSettings.createEl("p", {
+      text: "每个 Obsidian 仓库的插件配置彼此隔离。切换到另一个仓库后，需要回到 Zettlab App 或桌面端再次关联；默认会按仓库名称使用独立远端目录，同名仓库可在高级配置中自定义目录。",
+    });
 
     new Setting(manualSettings)
       .setName("WebDAV 地址")
@@ -99,18 +108,22 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       );
     new Setting(manualSettings).setName("密码").addText((text) => {
       text.inputEl.type = "password";
-      return text.setValue(this.plugin.settings.webdav.password).onChange(async (value) =>
-        saveText(this.plugin, () => {
-          this.plugin.settings.webdav.password = value;
-        })
-      );
+      return text
+        .setValue(this.plugin.settings.webdav.password)
+        .onChange(async (value) =>
+          saveText(this.plugin, () => {
+            this.plugin.settings.webdav.password = value;
+          })
+        );
     });
     new Setting(manualSettings)
       .setName("自动同步间隔")
       .setDesc("分钟；填 0 关闭定时同步。")
       .addText((text) =>
         text
-          .setValue(String(this.plugin.settings.autoRunEveryMilliseconds / 60_000))
+          .setValue(
+            String(this.plugin.settings.autoRunEveryMilliseconds / 60_000)
+          )
           .onChange(async (value) => {
             const minutes = Number(value);
             if (!Number.isFinite(minutes) || minutes < 0) {
