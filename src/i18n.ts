@@ -16,6 +16,9 @@ export type MessageKey =
   | "statusNotConnected"
   | "statusSyncing"
   | "statusSyncFailed"
+  | "transportLan"
+  | "transportPublic"
+  | "noReachableEndpoint"
   | "commandSyncNow"
   | "commandTestConnection"
   | "ribbonSync"
@@ -36,6 +39,9 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusNotConnected: "Not connected",
     statusSyncing: "Syncing…",
     statusSyncFailed: "Sync failed",
+    transportLan: "LAN",
+    transportPublic: "Public network",
+    noReachableEndpoint: "Neither the LAN nor public WebDAV address is reachable",
     commandSyncNow: "Sync Zettlab Memo now",
     commandTestConnection: "Test Zettlab Memo service",
     ribbonSync: "Sync Zettlab Memo",
@@ -54,6 +60,9 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusNotConnected: "未关联",
     statusSyncing: "正在同步…",
     statusSyncFailed: "同步失败",
+    transportLan: "局域网",
+    transportPublic: "公网",
+    noReachableEndpoint: "局域网和公网 WebDAV 地址均不可用",
     commandSyncNow: "立即同步 Zettlab Memo",
     commandTestConnection: "检测 Zettlab Memo 服务",
     ribbonSync: "同步 Zettlab Memo",
@@ -72,6 +81,9 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusNotConnected: "未關聯",
     statusSyncing: "正在同步…",
     statusSyncFailed: "同步失敗",
+    transportLan: "區域網路",
+    transportPublic: "公網",
+    noReachableEndpoint: "區域網路和公網 WebDAV 位址均無法使用",
     commandSyncNow: "立即同步 Zettlab Memo",
     commandTestConnection: "檢測 Zettlab Memo 服務",
     ribbonSync: "同步 Zettlab Memo",

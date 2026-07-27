@@ -9,6 +9,13 @@ export const DEFAULT_CONTENT_TYPE = "application/octet-stream";
 export type SUPPORTED_SERVICES_TYPE = "webdav";
 
 export type WebdavAuthType = "digest" | "basic";
+export type ObsidianDavTransport = "lan" | "public" | "manual";
+
+export interface ObsidianDavEndpoints {
+  lan?: string;
+  public?: string;
+}
+
 export type WebdavDepthType =
   | "auto"
   | "auto_unknown"
@@ -19,6 +26,8 @@ export type WebdavDepthType =
 
 export interface WebdavConfig {
   address: string;
+  /** Zettlab-managed endpoints. Absent means legacy single-address mode. */
+  zettlabEndpoints?: ObsidianDavEndpoints;
   username: string;
   password: string;
   authType: WebdavAuthType;
