@@ -91,6 +91,23 @@ describe("PC bootstrap flow", () => {
     assert.equal(legacySettings.webdav.zettlabEndpoints, undefined);
   });
 
+  it("preserves a working LAN legacy address when public is known but unavailable", () => {
+    const v2Payload = {
+      ...payload,
+      protocolVersion: 2 as const,
+      address: "http://192.168.5.30:9091/dav/",
+      endpoints: {
+        lan: "http://192.168.5.30:9091/dav/",
+        public: "https://memo.us-drive.zettlab.com/dav/",
+      },
+    };
+
+    const normalized = normalizeBootstrapPayload(v2Payload);
+
+    assert.equal(normalized?.address, v2Payload.address);
+    assert.deepEqual(normalized?.endpoints, v2Payload.endpoints);
+  });
+
   it("rejects malformed v2 endpoint sets and legacy addresses outside the set", () => {
     assert.equal(normalizeBootstrapPayload({
       ...payload,
@@ -100,6 +117,12 @@ describe("PC bootstrap flow", () => {
     assert.equal(normalizeBootstrapPayload({
       ...payload,
       protocolVersion: 2,
+      endpoints: { lan: "http://192.168.5.30:9091/dav/" },
+    }), null);
+    assert.equal(normalizeBootstrapPayload({
+      ...payload,
+      protocolVersion: 2,
+      address: "",
       endpoints: { lan: "http://192.168.5.30:9091/dav/" },
     }), null);
   });

@@ -17,7 +17,7 @@ Desktop loopback JSON adds:
 }
 ```
 
-Mobile direct URIs add `protocol_version=2`, `webdav_lan_addr`, and `webdav_public_addr`. Existing `address` and `webdav_addr` remain populated, preferring the public address, so v1 plugins keep their public-only behavior.
+Mobile direct URIs add `protocol_version=2`, `webdav_lan_addr`, and `webdav_public_addr`. Existing `address` and `webdav_addr` remain populated. Producers normally prefer a reachable public address, but may preserve the working LAN address when public is known but unavailable so the legacy single-address path does not point at a failed endpoint.
 
 ## Selection and recovery
 

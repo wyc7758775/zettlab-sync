@@ -109,6 +109,25 @@ describe("Zettlab DAV endpoint selection flow", () => {
     );
   });
 
+  it("accepts harmless whitespace around the exact Zettlab realm", async () => {
+    const request: DavProbeRequest = async (_address, headers) => ({
+      status: headers.Authorization ? 207 : 401,
+      headers: {
+        "www-authenticate": '  Basic realm = "Zettlab WebDAV"  ',
+      },
+    });
+
+    assert.equal(
+      (
+        await selectDavEndpoint(
+          settingsWithEndpoints({ lan: "http://192.168.5.30:9091/dav/" }),
+          request
+        )
+      )?.transport,
+      "lan"
+    );
+  });
+
   it("falls back to public when LAN is absent, spoofed, or rejects the app password", async () => {
     for (const lanAuthenticatedStatus of [401, 403]) {
       const addresses: string[] = [];
@@ -154,6 +173,33 @@ describe("Zettlab DAV endpoint selection flow", () => {
       ),
       null
     );
+  });
+
+  it("rejects realm prefixes instead of sending the app password", async () => {
+    for (const realm of [
+      'Basic realm="Zettlab WebDAV Evil"',
+      "Basic realm=Zettlab WebDAV-evil",
+      'Digest realm="Other", Basic realm="Zettlab WebDAV"',
+    ]) {
+      let authenticated = false;
+      const request: DavProbeRequest = async (_address, headers) => {
+        if (headers.Authorization) authenticated = true;
+        return {
+          status: headers.Authorization ? 207 : 401,
+          headers: { "www-authenticate": realm },
+        };
+      };
+
+      assert.equal(
+        await selectDavEndpoint(
+          settingsWithEndpoints({ lan: "http://192.168.5.30:9091/dav/" }),
+          request
+        ),
+        null,
+        realm
+      );
+      assert.equal(authenticated, false, realm);
+    }
   });
 
   it("returns failure when neither endpoint is reachable", async () => {

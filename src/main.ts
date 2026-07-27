@@ -27,6 +27,7 @@ import { ZettlabSyncSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, normalizeSettings } from "./settingsModel";
 import { syncer } from "./sync";
 import { getSyncOverview, type SyncOverview } from "./syncOverview";
+import { SyncRunGate } from "./syncRunGate";
 import {
   applyBootstrapPayload,
   buildBootstrapClaimRequest,
@@ -54,6 +55,7 @@ export default class ZettlabSyncPlugin extends Plugin {
   private lastSuccessfulSyncAt?: number;
   private lastFailedSyncAt?: number;
   private activeTransport?: ObsidianDavTransport;
+  private readonly syncRunGate = new SyncRunGate();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -233,10 +235,20 @@ export default class ZettlabSyncPlugin extends Plugin {
   }
 
   async syncRun(source: SyncTriggerSourceType): Promise<boolean> {
-    if (this.isSyncing) {
+    if (this.isSyncing || !this.syncRunGate.tryAcquire()) {
       if (source === "manual") new Notice(localize("syncInProgress"));
       return false;
     }
+    try {
+      return await this.syncRunAcquired(source);
+    } finally {
+      this.syncRunGate.release();
+    }
+  }
+
+  private async syncRunAcquired(
+    source: SyncTriggerSourceType
+  ): Promise<boolean> {
     if (!this.isConfigured()) {
       if (source === "manual") {
         new Notice(localize("connectFirst"));
@@ -378,7 +390,12 @@ export default class ZettlabSyncPlugin extends Plugin {
   }
 
   private scheduleSyncAfterSave(): void {
-    if (this.settings.syncOnSaveAfterMilliseconds <= 0 || this.isSyncing) return;
+    if (
+      this.settings.syncOnSaveAfterMilliseconds <= 0 ||
+      this.isSyncing ||
+      this.syncRunGate.isActive()
+    )
+      return;
     if (this.saveSyncTimer !== undefined) window.clearTimeout(this.saveSyncTimer);
     this.saveSyncTimer = window.setTimeout(() => {
       this.saveSyncTimer = undefined;

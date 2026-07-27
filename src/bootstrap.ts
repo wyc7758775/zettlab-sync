@@ -166,15 +166,13 @@ export const normalizeBootstrapPayload = (raw: unknown): ZettlabBootstrapPayload
   if (value.protocolVersion === 2) {
     const endpoints = normalizeZettlabDavEndpoints(value.endpoints);
     if (!endpoints) return null;
-    const legacyAddress = value.address.trim();
-    if (legacyAddress !== "") {
-      const normalizedLegacy = normalizePublicDavAddress(legacyAddress)
-        ?? normalizeLanDavAddress(legacyAddress);
-      if (!normalizedLegacy || !Object.values(endpoints).includes(normalizedLegacy)) return null;
-    }
+    const normalizedLegacy = normalizePublicDavAddress(value.address)
+      ?? normalizeLanDavAddress(value.address);
+    if (!normalizedLegacy || !Object.values(endpoints).includes(normalizedLegacy))
+      return null;
     return {
       protocolVersion: 2,
-      address: endpoints.public ?? endpoints.lan ?? "",
+      address: normalizedLegacy,
       endpoints,
       username: "sync",
       password: value.password,

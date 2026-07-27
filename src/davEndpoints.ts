@@ -8,7 +8,8 @@ const DAV_PATH = "/dav/";
 const LAN_PORT = "9091";
 const TOTAL_PROBE_TIMEOUT_MS = 3_000;
 const LAN_PROBE_TIMEOUT_MS = 1_500;
-const ZETTLAB_WEBDAV_REALM = /basic\s+realm="?Zettlab WebDAV"?/i;
+const ZETTLAB_WEBDAV_REALM =
+  /^basic\s+realm\s*=\s*(?:"Zettlab WebDAV"|Zettlab WebDAV)$/i;
 
 export interface DavProbeResponse {
   status: number;
@@ -200,7 +201,7 @@ async function probeLanDav(
   if (
     challenge?.status !== 401 ||
     !ZETTLAB_WEBDAV_REALM.test(
-      headerValue(challenge.headers, "www-authenticate")
+      headerValue(challenge.headers, "www-authenticate").trim()
     )
   ) {
     return false;
