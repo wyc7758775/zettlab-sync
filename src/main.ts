@@ -4,9 +4,15 @@
  */
 import { getLanguage, Notice, Plugin, requestUrl } from "obsidian";
 import type { InternalDBs } from "./localdb";
-import type { RemotelySavePluginSettings, SyncTriggerSourceType } from "./baseTypes";
+import type {
+  ObsidianDavTransport,
+  RemotelySavePluginSettings,
+  SyncTriggerSourceType,
+} from "./baseTypes";
 import { messyConfigToNormal, normalConfigToMessy } from "./configPersist";
 import { getClient } from "./fsGetter";
+import { selectDavEndpoint } from "./davEndpoints";
+import { obsidianDavProbeRequest } from "./obsidianDavProbe";
 import { FakeFsLocal } from "./fsLocal";
 import { PlainRemoteFs } from "./fsPlain";
 import { t, type MessageKey } from "./i18n";
@@ -21,6 +27,7 @@ import { ZettlabSyncSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, normalizeSettings } from "./settingsModel";
 import { syncer } from "./sync";
 import { getSyncOverview, type SyncOverview } from "./syncOverview";
+import { SyncRunGate } from "./syncRunGate";
 import {
   applyBootstrapPayload,
   buildBootstrapClaimRequest,
@@ -47,6 +54,8 @@ export default class ZettlabSyncPlugin extends Plugin {
   private statusBar?: HTMLElement;
   private lastSuccessfulSyncAt?: number;
   private lastFailedSyncAt?: number;
+  private activeTransport?: ObsidianDavTransport;
+  private readonly syncRunGate = new SyncRunGate();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -112,8 +121,17 @@ export default class ZettlabSyncPlugin extends Plugin {
   async bootstrapFromZettlabMemo(params: Record<string, string>): Promise<boolean> {
     const directPayload = normalizeDirectBootstrapPayload(params);
     const claimRequest = directPayload ? null : buildBootstrapClaimRequest(params);
-    const reportCompletion = async (status: "ok" | "failed"): Promise<void> => {
-      const completionRequest = buildBootstrapCompletionRequest(params, status);
+    const reportCompletion = async (
+      status: "ok" | "failed",
+      protocolVersion?: 2
+    ): Promise<void> => {
+      const transport = this.activeTransport === "lan" || this.activeTransport === "public"
+        ? this.activeTransport
+        : undefined;
+      const completionRequest = buildBootstrapCompletionRequest(params, status, {
+        ...(protocolVersion === 2 ? { protocolVersion } : {}),
+        ...(status === "ok" && transport ? { transport } : {}),
+      });
       if (!completionRequest) return;
       try {
         await requestUrl({
@@ -167,11 +185,11 @@ export default class ZettlabSyncPlugin extends Plugin {
         this.settings = previous;
         await this.saveSettings();
         this.setIdleStatus();
-        await reportCompletion("failed");
+        await reportCompletion("failed", payload.protocolVersion);
         new Notice(localize("bootstrapRolledBack"));
         return false;
       }
-      await reportCompletion("ok");
+      await reportCompletion("ok", payload.protocolVersion);
       new Notice(localize("connectionSuccess"));
       // Connection is already proven and completion has been acknowledged.
       // A transient first-sync failure must not discard valid credentials; the
@@ -184,7 +202,7 @@ export default class ZettlabSyncPlugin extends Plugin {
       this.settings = previous;
       await this.saveSettings();
       this.setIdleStatus();
-      await reportCompletion("failed");
+      await reportCompletion("failed", payload.protocolVersion);
       new Notice(localize("bootstrapRolledBack"));
       return false;
     }
@@ -195,19 +213,21 @@ export default class ZettlabSyncPlugin extends Plugin {
       new Notice(localize("connectFirst"));
       return false;
     }
-    const remote = getClient(this.settings, this.app.vault.getName(), async () => {
-      await this.saveSettings();
-    });
-    let failure = "";
-    const connected = await remote.checkConnect((error: unknown) => {
-      failure = errorMessage(error);
-    });
+    const selected = await selectDavEndpoint(this.settings, obsidianDavProbeRequest);
+    const connected = selected !== null;
+    if (selected) {
+      this.activeTransport = selected.transport;
+      this.setStatus(this.statusWithTransport(localize("statusReady")));
+    } else {
+      this.activeTransport = undefined;
+      this.setStatus(localize("statusNotConnected"));
+    }
     if (notify) {
       new Notice(
         connected
           ? localize("connectionSuccess")
           : localize("connectionFailed", {
-              reason: failure || localize("unknownError"),
+              reason: localize("noReachableEndpoint"),
             })
       );
     }
@@ -215,16 +235,42 @@ export default class ZettlabSyncPlugin extends Plugin {
   }
 
   async syncRun(source: SyncTriggerSourceType): Promise<boolean> {
-    if (this.isSyncing) {
+    if (this.isSyncing || !this.syncRunGate.tryAcquire()) {
       if (source === "manual") new Notice(localize("syncInProgress"));
       return false;
     }
+    try {
+      return await this.syncRunAcquired(source);
+    } finally {
+      this.syncRunGate.release();
+    }
+  }
+
+  private async syncRunAcquired(
+    source: SyncTriggerSourceType
+  ): Promise<boolean> {
     if (!this.isConfigured()) {
       if (source === "manual") {
         new Notice(localize("connectFirst"));
       }
       return false;
     }
+
+    const selected = await selectDavEndpoint(this.settings, obsidianDavProbeRequest);
+    if (!selected) {
+      this.activeTransport = undefined;
+      const failedAt = Date.now();
+      this.lastFailedSyncAt = failedAt;
+      await upsertLastFailedSyncTimeByVault(this.db, this.vaultRandomID, failedAt);
+      this.setStatus(localize("statusSyncFailed"));
+      new Notice(localize("syncFailed", { reason: localize("noReachableEndpoint") }));
+      return false;
+    }
+    this.activeTransport = selected.transport;
+    const selectedSettings: RemotelySavePluginSettings = {
+      ...this.settings,
+      webdav: { ...this.settings.webdav, address: selected.address },
+    };
 
     const local = new FakeFsLocal(
       this.app.vault,
@@ -235,7 +281,7 @@ export default class ZettlabSyncPlugin extends Plugin {
       undefined,
       this.settings.deleteToWhere
     );
-    const remote = getClient(this.settings, this.app.vault.getName(), async () => {
+    const remote = getClient(selectedSettings, this.app.vault.getName(), async () => {
       await this.saveSettings();
     });
     const plainRemote = new PlainRemoteFs(remote);
@@ -251,13 +297,15 @@ export default class ZettlabSyncPlugin extends Plugin {
         "default",
         this.vaultRandomID,
         this.app.vault.configDir,
-        this.settings,
+        selectedSettings,
         (threshold: number, changed: number, total: number) =>
           `Stopped: ${changed}/${total} files would change, above the ${threshold}% safety limit.`,
         (isSyncing) => {
           this.isSyncing = isSyncing;
           this.setStatus(
-            isSyncing ? localize("statusSyncing") : localize("statusReady")
+            this.statusWithTransport(
+              isSyncing ? localize("statusSyncing") : localize("statusReady")
+            )
           );
         },
         undefined,
@@ -296,7 +344,25 @@ export default class ZettlabSyncPlugin extends Plugin {
   }
 
   isConfigured(): boolean {
-    return /^https?:\/\/.+/.test(this.settings.webdav.address);
+    return /^https?:\/\/.+/.test(this.settings.webdav.address)
+      || Boolean(
+        this.settings.webdav.zettlabEndpoints?.lan
+        || this.settings.webdav.zettlabEndpoints?.public
+      );
+  }
+
+  getActiveTransport(): ObsidianDavTransport | undefined {
+    return this.activeTransport;
+  }
+
+  clearActiveTransport(): void {
+    this.activeTransport = undefined;
+  }
+
+  private statusWithTransport(status: string): string {
+    if (this.activeTransport === "lan") return `${status} · ${localize("transportLan")}`;
+    if (this.activeTransport === "public") return `${status} · ${localize("transportPublic")}`;
+    return status;
   }
 
   private setIdleStatus(): void {
@@ -324,7 +390,12 @@ export default class ZettlabSyncPlugin extends Plugin {
   }
 
   private scheduleSyncAfterSave(): void {
-    if (this.settings.syncOnSaveAfterMilliseconds <= 0 || this.isSyncing) return;
+    if (
+      this.settings.syncOnSaveAfterMilliseconds <= 0 ||
+      this.isSyncing ||
+      this.syncRunGate.isActive()
+    )
+      return;
     if (this.saveSyncTimer !== undefined) window.clearTimeout(this.saveSyncTimer);
     this.saveSyncTimer = window.setTimeout(() => {
       this.saveSyncTimer = undefined;

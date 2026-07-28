@@ -1,4 +1,5 @@
 import type { RemotelySavePluginSettings } from "./baseTypes";
+import { normalizeZettlabDavEndpoints } from "./davEndpoints";
 
 export const SYNC_ON_SAVE_DELAY_MILLISECONDS = 1000;
 
@@ -41,14 +42,17 @@ export const normalizeSettings = (
   input: PersistedSettings | null | undefined
 ): RemotelySavePluginSettings => {
   const source = input ?? {};
+  const zettlabEndpoints = normalizeZettlabDavEndpoints(source.webdav?.zettlabEndpoints);
+  const { zettlabEndpoints: _ignoredEndpoints, ...persistedWebdav } = source.webdav ?? {};
   const settings: RemotelySavePluginSettings = {
     webdav: {
       ...DEFAULT_SETTINGS.webdav,
-      ...source.webdav,
+      ...persistedWebdav,
       // Zettlab's WebDAV service accepts a fixed username and HTTP Basic only.
       // Do not carry legacy provider credentials or auth modes into this plugin.
       username: "sync",
       authType: "basic",
+      ...(zettlabEndpoints ? { zettlabEndpoints } : {}),
     },
     password: "",
     serviceType: "webdav",

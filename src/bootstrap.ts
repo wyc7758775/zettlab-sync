@@ -1,8 +1,16 @@
 import type { RemotelySavePluginSettings } from "./baseTypes";
+import type { ObsidianDavEndpoints, ObsidianDavTransport } from "./baseTypes";
+import {
+  normalizeLanDavAddress,
+  normalizePublicDavAddress,
+  normalizeZettlabDavEndpoints,
+} from "./davEndpoints";
 import { normalizeSettings } from "./settingsModel";
 
 export interface ZettlabBootstrapPayload {
+  protocolVersion?: 2;
   address: string;
+  endpoints?: ObsidianDavEndpoints;
   username: "sync";
   password: string;
   autoRunEveryMilliseconds: number;
@@ -14,6 +22,11 @@ export interface BootstrapRequest {
   url: string;
   method: "GET";
   headers: Record<string, string>;
+}
+
+export interface BootstrapCompletionMetadata {
+  protocolVersion?: 2;
+  transport?: Extract<ObsidianDavTransport, "lan" | "public">;
 }
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
@@ -47,14 +60,25 @@ export const normalizeDirectBootstrapPayload = (
   params: Record<string, string>
 ): ZettlabBootstrapPayload | null => {
   if (params.mode !== "direct") return null;
+  const protocolVersion = params.protocol_version === "2" ? 2 : undefined;
   const payload = normalizeBootstrapPayload({
     address: params.webdav_addr,
+    ...(protocolVersion === 2
+      ? {
+          protocolVersion,
+          endpoints: {
+            lan: params.webdav_lan_addr,
+            public: params.webdav_public_addr,
+          },
+        }
+      : {}),
     username: params.webdav_username,
     password: params.webdav_password,
     autoRunEveryMilliseconds: Number(params.auto_run_every_milliseconds),
     syncOnSaveAfterMilliseconds: Number(params.sync_on_save_after_milliseconds),
   });
   if (!payload) return null;
+  if (payload.protocolVersion === 2) return payload;
   const address = new URL(payload.address);
   const host = address.hostname.toLowerCase();
   if (
@@ -80,11 +104,15 @@ export const buildBootstrapClaimUrl = (
 
 export const buildBootstrapCompletionUrl = (
   params: Record<string, string>,
-  status: "ok" | "failed"
+  status: "ok" | "failed",
+  metadata?: BootstrapCompletionMetadata
 ): string | null => {
   const endpoint = parseDesktopEndpoint(params);
   if (!endpoint) return null;
-  return `http://127.0.0.1:${endpoint.port}/complete?token=${encodeURIComponent(endpoint.token)}&status=${status}`;
+  const query = new URLSearchParams({ token: endpoint.token, status });
+  if (metadata?.protocolVersion === 2) query.set("protocol_version", "2");
+  if (metadata?.transport) query.set("transport", metadata.transport);
+  return `http://127.0.0.1:${endpoint.port}/complete?${query.toString()}`;
 };
 
 export const buildBootstrapClaimRequest = (
@@ -102,9 +130,10 @@ export const buildBootstrapClaimRequest = (
 
 export const buildBootstrapCompletionRequest = (
   params: Record<string, string>,
-  status: "ok" | "failed"
+  status: "ok" | "failed",
+  metadata?: BootstrapCompletionMetadata
 ): BootstrapRequest | null => {
-  const desktopUrl = buildBootstrapCompletionUrl(params, status);
+  const desktopUrl = buildBootstrapCompletionUrl(params, status, metadata);
   if (!desktopUrl) return null;
   return {
     mode: "desktop",
@@ -134,6 +163,25 @@ export const normalizeBootstrapPayload = (raw: unknown): ZettlabBootstrapPayload
     return null;
   }
 
+  if (value.protocolVersion === 2) {
+    const endpoints = normalizeZettlabDavEndpoints(value.endpoints);
+    if (!endpoints) return null;
+    const normalizedLegacy = normalizePublicDavAddress(value.address)
+      ?? normalizeLanDavAddress(value.address);
+    if (!normalizedLegacy || !Object.values(endpoints).includes(normalizedLegacy))
+      return null;
+    return {
+      protocolVersion: 2,
+      address: normalizedLegacy,
+      endpoints,
+      username: "sync",
+      password: value.password,
+      autoRunEveryMilliseconds: value.autoRunEveryMilliseconds,
+      syncOnSaveAfterMilliseconds: value.syncOnSaveAfterMilliseconds,
+    };
+  }
+  if (value.protocolVersion !== undefined) return null;
+
   let address: URL;
   try {
     address = new URL(value.address);
@@ -160,17 +208,22 @@ export const normalizeBootstrapPayload = (raw: unknown): ZettlabBootstrapPayload
 export const applyBootstrapPayload = (
   current: RemotelySavePluginSettings,
   payload: ZettlabBootstrapPayload
-): RemotelySavePluginSettings =>
-  normalizeSettings({
+): RemotelySavePluginSettings => {
+  const webdav = {
+    ...current.webdav,
+    address: payload.address,
+    username: "sync" as const,
+    password: payload.password,
+    authType: "basic" as const,
+    ...(payload.protocolVersion === 2 && payload.endpoints
+      ? { zettlabEndpoints: payload.endpoints }
+      : { zettlabEndpoints: undefined }),
+  };
+  return normalizeSettings({
     ...current,
-    webdav: {
-      ...current.webdav,
-      address: payload.address,
-      username: "sync",
-      password: payload.password,
-      authType: "basic",
-    },
+    webdav,
     serviceType: "webdav",
     autoRunEveryMilliseconds: payload.autoRunEveryMilliseconds,
     syncOnSaveAfterMilliseconds: payload.syncOnSaveAfterMilliseconds,
   });
+};

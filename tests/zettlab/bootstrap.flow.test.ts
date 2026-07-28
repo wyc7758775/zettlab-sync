@@ -62,6 +62,70 @@ describe("PC bootstrap flow", () => {
     assert.equal(attempts, 3);
     assert.deepEqual(waits, [500, 1_000]);
   });
+
+  it("accepts protocol v2 endpoints and reports the selected transport compatibly", () => {
+    const v2Payload = {
+      ...payload,
+      protocolVersion: 2 as const,
+      address: "https://memo.us-drive.zettlab.com/dav/",
+      endpoints: {
+        lan: "http://192.168.5.30:9091/dav/",
+        public: "https://memo.us-drive.zettlab.com/dav/",
+      },
+    };
+    assert.deepEqual(normalizeBootstrapPayload(v2Payload), v2Payload);
+    assert.equal(
+      buildBootstrapCompletionUrl(
+        { token: "a".repeat(43), port: "43123" },
+        "ok",
+        { protocolVersion: 2, transport: "lan" }
+      ),
+      `http://127.0.0.1:43123/complete?token=${"a".repeat(43)}&status=ok&protocol_version=2&transport=lan`
+    );
+
+    const settings = applyBootstrapPayload(DEFAULT_SETTINGS, v2Payload);
+    assert.deepEqual(settings.webdav.zettlabEndpoints, v2Payload.endpoints);
+    assert.equal(settings.webdav.address, v2Payload.address);
+
+    const legacySettings = applyBootstrapPayload(settings, payload);
+    assert.equal(legacySettings.webdav.zettlabEndpoints, undefined);
+  });
+
+  it("preserves a working LAN legacy address when public is known but unavailable", () => {
+    const v2Payload = {
+      ...payload,
+      protocolVersion: 2 as const,
+      address: "http://192.168.5.30:9091/dav/",
+      endpoints: {
+        lan: "http://192.168.5.30:9091/dav/",
+        public: "https://memo.us-drive.zettlab.com/dav/",
+      },
+    };
+
+    const normalized = normalizeBootstrapPayload(v2Payload);
+
+    assert.equal(normalized?.address, v2Payload.address);
+    assert.deepEqual(normalized?.endpoints, v2Payload.endpoints);
+  });
+
+  it("rejects malformed v2 endpoint sets and legacy addresses outside the set", () => {
+    assert.equal(normalizeBootstrapPayload({
+      ...payload,
+      protocolVersion: 2,
+      endpoints: { lan: "http://127.0.0.1:9091/dav/" },
+    }), null);
+    assert.equal(normalizeBootstrapPayload({
+      ...payload,
+      protocolVersion: 2,
+      endpoints: { lan: "http://192.168.5.30:9091/dav/" },
+    }), null);
+    assert.equal(normalizeBootstrapPayload({
+      ...payload,
+      protocolVersion: 2,
+      address: "",
+      endpoints: { lan: "http://192.168.5.30:9091/dav/" },
+    }), null);
+  });
 });
 
 describe("mobile bootstrap flow", () => {
@@ -106,5 +170,31 @@ describe("mobile bootstrap flow", () => {
       }),
       null
     );
+  });
+
+  it("accepts a direct v2 hand-off with LAN and public endpoints", () => {
+    const direct = normalizeDirectBootstrapPayload({
+      mode: "direct",
+      protocol_version: "2",
+      webdav_addr: "https://swift-clover.cn-drive.zettlab.com/dav/",
+      webdav_lan_addr: "http://192.168.5.30:9091/dav/",
+      webdav_public_addr: "https://swift-clover.cn-drive.zettlab.com/dav/",
+      webdav_username: "sync",
+      webdav_password: "strong-mobile-password",
+      auto_run_every_milliseconds: "300000",
+      sync_on_save_after_milliseconds: "1000",
+    });
+    assert.deepEqual(direct, {
+      protocolVersion: 2,
+      address: "https://swift-clover.cn-drive.zettlab.com/dav/",
+      endpoints: {
+        lan: "http://192.168.5.30:9091/dav/",
+        public: "https://swift-clover.cn-drive.zettlab.com/dav/",
+      },
+      username: "sync",
+      password: "strong-mobile-password",
+      autoRunEveryMilliseconds: 300_000,
+      syncOnSaveAfterMilliseconds: 1_000,
+    });
   });
 });

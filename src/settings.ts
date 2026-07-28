@@ -52,6 +52,12 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("同步策略")
       .setDesc(getSyncScheduleSummary(this.plugin.settings.autoRunEveryMilliseconds));
+    const activeTransport = this.plugin.getActiveTransport();
+    if (activeTransport === "lan" || activeTransport === "public") {
+      new Setting(containerEl)
+        .setName("当前通道")
+        .setDesc(activeTransport === "lan" ? "局域网" : "公网");
+    }
 
     let manualSettings!: HTMLDetailsElement;
     new Setting(containerEl)
@@ -94,6 +100,8 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
           .onChange(async (value) =>
             saveText(this.plugin, () => {
               this.plugin.settings.webdav.address = value.trim();
+              this.plugin.settings.webdav.zettlabEndpoints = undefined;
+              this.plugin.clearActiveTransport();
             })
           )
       );
