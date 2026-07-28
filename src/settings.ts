@@ -5,7 +5,10 @@
 import { Notice, PluginSettingTab, Setting } from "obsidian";
 import type { ConflictActionType } from "./baseTypes";
 import type ZettlabSyncPlugin from "./main";
-import { SYNC_ON_SAVE_DELAY_MILLISECONDS } from "./settingsModel";
+import {
+  SYNC_ON_SAVE_DELAY_MILLISECONDS,
+  parseProtectModifyPercentage,
+} from "./settingsModel";
 import { getSyncScheduleSummary } from "./syncOverview";
 export { DEFAULT_SETTINGS, normalizeSettings } from "./settingsModel";
 
@@ -59,7 +62,6 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
         .setDesc(activeTransport === "lan" ? "局域网" : "公网");
     }
 
-    let manualSettings!: HTMLDetailsElement;
     new Setting(containerEl)
       .setName("同步操作")
       .setDesc("无需修改配置即可手动同步或检测当前连接。")
@@ -76,16 +78,16 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
         })
       )
       .addButton((button) =>
-        button.setButtonText("手动设置").onClick(() => {
+        button.setButtonText("高级选项").onClick(() => {
           manualSettings.open = true;
           manualSettings.scrollIntoView({ block: "start" });
         })
       );
 
-    manualSettings = containerEl.createEl("details", {
+    const manualSettings = containerEl.createEl("details", {
       cls: "zettlab-sync-manual-settings",
     });
-    manualSettings.createEl("summary", { text: "手动接入与同步偏好" });
+    manualSettings.createEl("summary", { text: "高级选项" });
     manualSettings.createEl("p", {
       text: "自动接入完成前、迁移旧配置或排障时，才需要填写地址和 App 密码。用户名固定为 sync，鉴权固定为 Basic。",
     });
@@ -158,6 +160,30 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
             })
           )
       );
+    new Setting(manualSettings)
+      .setName("批量变更保护")
+      .setDesc(
+        "本轮修改或删除的文件达到该比例时停止同步。范围 1–100；填写 100 关闭保护。"
+      )
+      .addText((text) => {
+        text.inputEl.type = "number";
+        text.inputEl.min = "1";
+        text.inputEl.max = "100";
+        text.inputEl.step = "1";
+        return text
+          .setPlaceholder("50")
+          .setValue(String(this.plugin.settings.protectModifyPercentage))
+          .onChange(async (value) => {
+            const percentage = parseProtectModifyPercentage(value);
+            if (percentage === undefined) {
+              new Notice("请输入 1–100 之间的整数百分比。");
+              return;
+            }
+            await saveText(this.plugin, () => {
+              this.plugin.settings.protectModifyPercentage = percentage;
+            });
+          });
+      });
     new Setting(manualSettings)
       .setName("跳过大文件")
       .setDesc("MB；填 0 不跳过任何文件。")

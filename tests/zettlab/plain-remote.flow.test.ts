@@ -10,6 +10,7 @@ import { syncer } from "../../src/sync";
 class MemoryFs extends FakeFs {
   kind = "memory";
   private files = new Map<string, ArrayBuffer>();
+  private mtimes = new Map<string, number>();
 
   async walk(): Promise<Entity[]> {
     return [...this.files.entries()].map(([key, content]) => ({
@@ -17,24 +18,33 @@ class MemoryFs extends FakeFs {
       keyRaw: key,
       size: content.byteLength,
       sizeRaw: content.byteLength,
-      mtimeCli: 1,
-      mtimeSvr: 1,
+      mtimeCli: this.mtimes.get(key) ?? 1,
+      mtimeSvr: this.mtimes.get(key) ?? 1,
     }));
   }
   async walkPartial(): Promise<Entity[]> { return this.walk(); }
   async stat(key: string): Promise<Entity> {
     const content = this.files.get(key);
     if (content === undefined) throw new Error("missing file");
-    return { key, keyRaw: key, size: content.byteLength, sizeRaw: content.byteLength, mtimeCli: 1, mtimeSvr: 1 };
+    const mtime = this.mtimes.get(key) ?? 1;
+    return { key, keyRaw: key, size: content.byteLength, sizeRaw: content.byteLength, mtimeCli: mtime, mtimeSvr: mtime };
   }
   async mkdir(key: string): Promise<Entity> { return { key, keyRaw: key, size: 0, sizeRaw: 0 }; }
-  async writeFile(key: string, content: ArrayBuffer): Promise<Entity> {
+  async writeFile(key: string, content: ArrayBuffer, mtime = 1): Promise<Entity> {
     this.files.set(key, content);
+    this.mtimes.set(key, mtime);
     return this.stat(key);
   }
-  async readFile(key: string): Promise<ArrayBuffer> { return this.files.get(key) ?? new ArrayBuffer(0); }
-  async rename(key1: string, key2: string): Promise<void> { this.files.set(key2, await this.readFile(key1)); this.files.delete(key1); }
-  async rm(key: string): Promise<void> { this.files.delete(key); }
+  async readFile(key: string): Promise<ArrayBuffer> {
+    return this.files.get(key)?.slice(0) ?? new ArrayBuffer(0);
+  }
+  async rename(key1: string, key2: string): Promise<void> {
+    this.files.set(key2, await this.readFile(key1));
+    this.mtimes.set(key2, this.mtimes.get(key1) ?? 1);
+    this.files.delete(key1);
+    this.mtimes.delete(key1);
+  }
+  async rm(key: string): Promise<void> { this.files.delete(key); this.mtimes.delete(key); }
   async checkConnect(): Promise<boolean> { return true; }
   async getUserDisplayName(): Promise<string> { return "memory"; }
   async revokeAuth(): Promise<void> {}
@@ -107,5 +117,61 @@ describe("plain remote sync boundary", () => {
     assert.equal(new TextDecoder().decode(await remote.readFile("first.md")), "# First sync");
     assert.equal(syncPlans.size(), 1);
     assert.equal(previousRecords.size(), 1);
+  });
+
+  it("allows a user-configured 100 percent threshold to continue a small-vault sync", async () => {
+    Object.assign(globalThis, {
+      window: {
+        moment: () => ({
+          format: () => "1970-01-01T00:00:00Z",
+          toISOString: () => "1970-01-01T00:00:00.000Z",
+        }),
+      },
+    });
+    const local = new MemoryFs();
+    const remote = new MemoryFs();
+    const plainRemote = new PlainRemoteFs(remote);
+    const firstVersion = new TextEncoder().encode("first").buffer;
+    const secondVersion = new TextEncoder().encode("second").buffer;
+    await local.writeFile("one.md", firstVersion, 1, 1);
+    await local.writeFile("two.md", firstVersion, 1, 1);
+    const database = {
+      syncPlansTbl: new MemoryTable(),
+      prevSyncRecordsTbl: new MemoryTable(),
+    } as unknown as InternalDBs;
+    let syncError = "";
+    const runSync = async (protectModifyPercentage: number) => {
+      syncError = "";
+      await syncer(
+        local,
+        remote,
+        plainRemote,
+        undefined,
+        database,
+        "manual",
+        "default",
+        "test-vault",
+        ".obsidian",
+        normalizeSettings({ protectModifyPercentage }),
+        () => "safety limit reached",
+        () => undefined,
+        undefined,
+        async (_trigger, error) => {
+          syncError = error.message;
+        }
+      );
+    };
+
+    await runSync(50);
+    assert.equal(syncError, "");
+    await local.writeFile("one.md", secondVersion, 2, 1);
+
+    await runSync(50);
+    assert.equal(syncError, "safety limit reached");
+    assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "first");
+
+    await runSync(100);
+    assert.equal(syncError, "");
+    assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "second");
   });
 });

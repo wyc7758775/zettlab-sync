@@ -3,6 +3,16 @@ import { normalizeZettlabDavEndpoints } from "./davEndpoints";
 
 export const SYNC_ON_SAVE_DELAY_MILLISECONDS = 1000;
 
+export const parseProtectModifyPercentage = (
+  value: string
+): number | undefined => {
+  const percentage = Number(value);
+  if (!Number.isInteger(percentage) || percentage < 1 || percentage > 100) {
+    return undefined;
+  }
+  return percentage;
+};
+
 export const DEFAULT_SETTINGS: RemotelySavePluginSettings = {
   webdav: {
     address: "",

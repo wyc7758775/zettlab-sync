@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "mocha";
 import {
   DEFAULT_SETTINGS,
-  normalizeSettings,
   SYNC_ON_SAVE_DELAY_MILLISECONDS,
+  normalizeSettings,
+  parseProtectModifyPercentage,
 } from "../../src/settingsModel";
 
 describe("settings normalization", () => {
@@ -30,6 +31,16 @@ describe("settings normalization", () => {
   it("uses conservative WebDAV defaults for a new install", () => {
     assert.deepEqual(normalizeSettings(undefined), DEFAULT_SETTINGS);
     assert.equal(SYNC_ON_SAVE_DELAY_MILLISECONDS, 1000);
+  });
+
+  it("accepts only whole-number safety thresholds from 1 through 100", () => {
+    assert.equal(parseProtectModifyPercentage("1"), 1);
+    assert.equal(parseProtectModifyPercentage("50"), 50);
+    assert.equal(parseProtectModifyPercentage("100"), 100);
+    assert.equal(parseProtectModifyPercentage(""), undefined);
+    assert.equal(parseProtectModifyPercentage("0"), undefined);
+    assert.equal(parseProtectModifyPercentage("50.5"), undefined);
+    assert.equal(parseProtectModifyPercentage("101"), undefined);
   });
 
   it("keeps valid managed endpoints and drops a malformed persisted set", () => {
