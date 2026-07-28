@@ -6,6 +6,7 @@ import { PlainRemoteFs } from "../../src/fsPlain";
 import type { InternalDBs } from "../../src/localdb";
 import { normalizeSettings } from "../../src/settingsModel";
 import { syncer } from "../../src/sync";
+import { ProtectModifyError, type ProtectModifyDetails } from "../../src/syncSafety";
 
 class MemoryFs extends FakeFs {
   kind = "memory";
@@ -119,7 +120,7 @@ describe("plain remote sync boundary", () => {
     assert.equal(previousRecords.size(), 1);
   });
 
-  it("allows a user-configured 100 percent threshold to continue a small-vault sync", async () => {
+  it("continues a protected small-vault sync only after one-time confirmation", async () => {
     Object.assign(globalThis, {
       window: {
         moment: () => ({
@@ -133,15 +134,18 @@ describe("plain remote sync boundary", () => {
     const plainRemote = new PlainRemoteFs(remote);
     const firstVersion = new TextEncoder().encode("first").buffer;
     const secondVersion = new TextEncoder().encode("second").buffer;
+    const thirdVersion = new TextEncoder().encode("third").buffer;
     await local.writeFile("one.md", firstVersion, 1, 1);
     await local.writeFile("two.md", firstVersion, 1, 1);
     const database = {
       syncPlansTbl: new MemoryTable(),
       prevSyncRecordsTbl: new MemoryTable(),
     } as unknown as InternalDBs;
-    let syncError = "";
-    const runSync = async (protectModifyPercentage: number) => {
-      syncError = "";
+    let syncError: Error | undefined;
+    const runSync = async (
+      confirmProtectedChanges?: (details: ProtectModifyDetails) => Promise<boolean>
+    ) => {
+      syncError = undefined;
       await syncer(
         local,
         remote,
@@ -152,26 +156,45 @@ describe("plain remote sync boundary", () => {
         "default",
         "test-vault",
         ".obsidian",
-        normalizeSettings({ protectModifyPercentage }),
+        normalizeSettings({ protectModifyPercentage: 50 }),
         () => "safety limit reached",
         () => undefined,
         undefined,
         async (_trigger, error) => {
-          syncError = error.message;
-        }
+          syncError = error;
+        },
+        undefined,
+        undefined,
+        undefined,
+        confirmProtectedChanges
       );
     };
 
-    await runSync(50);
-    assert.equal(syncError, "");
+    await runSync();
+    assert.equal(syncError, undefined);
     await local.writeFile("one.md", secondVersion, 2, 1);
 
-    await runSync(50);
-    assert.equal(syncError, "safety limit reached");
+    await runSync();
+    assert.ok(syncError instanceof ProtectModifyError);
+    assert.deepEqual(syncError.details.items, [
+      { path: "one.md", action: "upload" },
+    ]);
     assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "first");
 
-    await runSync(100);
-    assert.equal(syncError, "");
+    let confirmationCount = 0;
+    await runSync(async (details) => {
+      confirmationCount += 1;
+      assert.equal(details.changed, 1);
+      assert.equal(details.total, 2);
+      return true;
+    });
+    assert.equal(syncError, undefined);
+    assert.equal(confirmationCount, 1);
+    assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "second");
+
+    await local.writeFile("one.md", thirdVersion, 3, 1);
+    await runSync();
+    assert.ok(syncError instanceof ProtectModifyError);
     assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "second");
   });
 });

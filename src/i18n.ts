@@ -23,7 +23,19 @@ export type MessageKey =
   | "commandTestConnection"
   | "ribbonSync"
   | "bootstrapInvalid"
-  | "bootstrapRolledBack";
+  | "bootstrapRolledBack"
+  | "safetyStoppedReason"
+  | "safetyTitle"
+  | "safetySummary"
+  | "safetyDescription"
+  | "safetyCancel"
+  | "safetyContinueOnce"
+  | "safetyMoreItems"
+  | "safetyActionUpload"
+  | "safetyActionDownload"
+  | "safetyActionDeleteLocal"
+  | "safetyActionDeleteRemote"
+  | "safetyActionConflict";
 
 const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
   en: {
@@ -47,6 +59,18 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ribbonSync: "Sync Zettlab Memo",
     bootstrapInvalid: "This Zettlab Memo connection request is invalid or expired. Return to Zettlab Memo and retry.",
     bootstrapRolledBack: "Automatic setup failed. Your previous Obsidian settings were restored.",
+    safetyStoppedReason: "{{changed}} of {{total}} files reached the {{threshold}}% safety limit",
+    safetyTitle: "Review sync changes",
+    safetySummary: "{{changed}} of {{total}} files would change, reaching the {{threshold}}% safety limit.",
+    safetyDescription: "Review the files below. Continuing applies this sync plan once and does not change your safety setting.",
+    safetyCancel: "Cancel sync",
+    safetyContinueOnce: "Continue once",
+    safetyMoreItems: "{{count}} more files are not shown.",
+    safetyActionUpload: "Upload update",
+    safetyActionDownload: "Download update",
+    safetyActionDeleteLocal: "Delete locally",
+    safetyActionDeleteRemote: "Delete from Memo",
+    safetyActionConflict: "Resolve conflict",
   },
   zh_CN: {
     connectionSuccess: "Zettlab Memo 服务关联成功",
@@ -68,6 +92,18 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ribbonSync: "同步 Zettlab Memo",
     bootstrapInvalid: "Zettlab Memo 关联请求无效或已过期，请返回 Zettlab Memo 重试。",
     bootstrapRolledBack: "自动配置失败，已恢复原来的 Obsidian 设置。",
+    safetyStoppedReason: "{{changed}}/{{total}} 个文件达到 {{threshold}}% 安全阈值",
+    safetyTitle: "确认本次同步变更",
+    safetySummary: "预计变更 {{changed}}/{{total}} 个文件，已达到 {{threshold}}% 安全阈值。",
+    safetyDescription: "请核对以下文件。继续只对本次同步生效，不会修改长期安全设置。",
+    safetyCancel: "取消同步",
+    safetyContinueOnce: "仅本次继续",
+    safetyMoreItems: "另有 {{count}} 个文件未显示。",
+    safetyActionUpload: "上传更新",
+    safetyActionDownload: "下载更新",
+    safetyActionDeleteLocal: "删除本地",
+    safetyActionDeleteRemote: "删除 Memo 端",
+    safetyActionConflict: "处理冲突",
   },
   zh_TW: {
     connectionSuccess: "Zettlab Memo 服務關聯成功",
@@ -89,6 +125,18 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ribbonSync: "同步 Zettlab Memo",
     bootstrapInvalid: "Zettlab Memo 關聯請求無效或已過期，請返回 Zettlab Memo 重試。",
     bootstrapRolledBack: "自動設定失敗，已還原原本的 Obsidian 設定。",
+    safetyStoppedReason: "{{changed}}/{{total}} 個檔案達到 {{threshold}}% 安全門檻",
+    safetyTitle: "確認本次同步變更",
+    safetySummary: "預計變更 {{changed}}/{{total}} 個檔案，已達到 {{threshold}}% 安全門檻。",
+    safetyDescription: "請核對以下檔案。繼續只對本次同步生效，不會修改長期安全設定。",
+    safetyCancel: "取消同步",
+    safetyContinueOnce: "僅本次繼續",
+    safetyMoreItems: "另有 {{count}} 個檔案未顯示。",
+    safetyActionUpload: "上傳更新",
+    safetyActionDownload: "下載更新",
+    safetyActionDeleteLocal: "刪除本機",
+    safetyActionDeleteRemote: "刪除 Memo 端",
+    safetyActionConflict: "處理衝突",
   },
 };
 

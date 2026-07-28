@@ -36,6 +36,11 @@ import {
   unixTimeToStr,
 } from "./misc";
 import type { Profiler } from "./profiler";
+import {
+  ProtectModifyError,
+  buildProtectModifyDetails,
+  type ProtectModifyDetails,
+} from "./syncSafety";
 
 const copyEntityAndFixTimeFormat = (
   src: Entity,
@@ -1193,7 +1198,10 @@ export const doActualSync = async (
   getProtectModifyPercentageErrorStrFunc: any,
   db: InternalDBs,
   profiler: Profiler | undefined,
-  callbackSyncProcess?: any
+  callbackSyncProcess?: any,
+  confirmProtectedChangesFunc?: (
+    details: ProtectModifyDetails
+  ) => Promise<boolean>
 ) => {
   profiler?.addIndent();
   profiler?.insert("doActualSync: enter");
@@ -1242,10 +1250,23 @@ export const doActualSync = async (
         realModifyDeleteCount,
         allFilesCount
       );
+      const details = buildProtectModifyDetails(
+        mixedEntityMappings,
+        protectModifyPercentage,
+        realModifyDeleteCount,
+        allFilesCount
+      );
+      const continueOnce =
+        confirmProtectedChangesFunc === undefined
+          ? false
+          : await confirmProtectedChangesFunc(details);
 
-      profiler?.insert("doActualSync: error branch");
-      profiler?.removeIndent();
-      throw Error(errorStr);
+      if (!continueOnce) {
+        profiler?.insert("doActualSync: safety stop");
+        profiler?.removeIndent();
+        throw new ProtectModifyError(errorStr, details);
+      }
+      profiler?.insert("doActualSync: safety override for this run");
     }
   }
 
@@ -1375,7 +1396,10 @@ export async function syncer(
     step: number,
     everythingOk: boolean
   ) => any,
-  callbackSyncProcess?: any
+  callbackSyncProcess?: any,
+  confirmProtectedChangesFunc?: (
+    details: ProtectModifyDetails
+  ) => Promise<boolean>
 ) {
   markIsSyncingFunc(true);
 
@@ -1495,7 +1519,8 @@ export async function syncer(
         getProtectModifyPercentageErrorStrFunc,
         db,
         profiler,
-        callbackSyncProcess
+        callbackSyncProcess,
+        confirmProtectedChangesFunc
       );
       profiler?.insert(`finish step${step} (actual sync)`);
     } else {

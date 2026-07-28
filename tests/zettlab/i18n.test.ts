@@ -18,4 +18,15 @@ describe("Zettlab Memo notices", () => {
   it("falls back to English for other Obsidian locales", () => {
     assert.equal(t("connectionSuccess", {}, "fr-FR"), "Zettlab Memo service connected.");
   });
+
+  it("describes a safety stop without exposing an English engine error", () => {
+    assert.equal(
+      t(
+        "safetySummary",
+        { changed: "1", total: "2", threshold: "50" },
+        "zh-CN"
+      ),
+      "预计变更 1/2 个文件，已达到 50% 安全阈值。"
+    );
+  });
 });

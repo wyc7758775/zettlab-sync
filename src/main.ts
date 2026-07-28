@@ -29,6 +29,11 @@ import { syncer } from "./sync";
 import { getSyncOverview, type SyncOverview } from "./syncOverview";
 import { SyncRunGate } from "./syncRunGate";
 import {
+  ProtectModifyError,
+  shouldOfferSafetyOverride,
+} from "./syncSafety";
+import { confirmProtectedChanges } from "./syncSafetyModal";
+import {
   applyBootstrapPayload,
   buildBootstrapClaimRequest,
   buildBootstrapCompletionRequest,
@@ -285,7 +290,7 @@ export default class ZettlabSyncPlugin extends Plugin {
       await this.saveSettings();
     });
     const plainRemote = new PlainRemoteFs(remote);
-    let failed = "";
+    let failed: Error | undefined;
     try {
       await syncer(
         local,
@@ -299,7 +304,11 @@ export default class ZettlabSyncPlugin extends Plugin {
         this.app.vault.configDir,
         selectedSettings,
         (threshold: number, changed: number, total: number) =>
-          `Stopped: ${changed}/${total} files would change, above the ${threshold}% safety limit.`,
+          localize("safetyStoppedReason", {
+            changed: String(changed),
+            total: String(total),
+            threshold: String(threshold),
+          }),
         (isSyncing) => {
           this.isSyncing = isSyncing;
           this.setStatus(
@@ -310,18 +319,30 @@ export default class ZettlabSyncPlugin extends Plugin {
         },
         undefined,
         async (_trigger, error) => {
-          failed = errorMessage(error);
-          console.error("Zettlab Sync failed", error);
-        }
+          failed = error;
+          if (!(error instanceof ProtectModifyError)) {
+            console.error("Zettlab Sync failed", error);
+          }
+        },
+        undefined,
+        undefined,
+        undefined,
+        shouldOfferSafetyOverride(source)
+          ? (details) => confirmProtectedChanges(this.app, details, localize)
+          : undefined
       );
     } catch (error) {
-      failed = errorMessage(error);
+      failed = error instanceof Error ? error : new Error(String(error));
       console.error("Zettlab Sync failed", error);
     } finally {
       this.isSyncing = false;
       await plainRemote.closeResources();
     }
-    if (failed !== "") {
+    if (failed instanceof ProtectModifyError && source === "manual") {
+      this.setStatus(this.statusWithTransport(localize("statusReady")));
+      return false;
+    }
+    if (failed !== undefined) {
       this.lastFailedSyncAt = Date.now();
       await upsertLastFailedSyncTimeByVault(
         this.db,
@@ -329,7 +350,9 @@ export default class ZettlabSyncPlugin extends Plugin {
         this.lastFailedSyncAt
       );
       this.setStatus(localize("statusSyncFailed"));
-      new Notice(localize("syncFailed", { reason: failed }));
+      if (!(failed instanceof ProtectModifyError)) {
+        new Notice(localize("syncFailed", { reason: errorMessage(failed) }));
+      }
       return false;
     } else {
       this.lastSuccessfulSyncAt = Date.now();
