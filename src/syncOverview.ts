@@ -13,9 +13,8 @@ export const getSyncOverview = (input: {
   if (!input.configured) {
     return {
       state: "not-configured",
-      title: "尚未接入 Zettlab",
-      description:
-        "当前插件尚未收到配置。App 或 Web 完成自动接入后，此处会直接显示同步状态；现在也可以展开下方手动设置。",
+      title: "尚未关联 Memo",
+      description: "请从 Zettlab App 或桌面端完成关联，连接信息会自动写入。",
     };
   }
 
@@ -27,7 +26,7 @@ export const getSyncOverview = (input: {
     return {
       state: "needs-attention",
       title: "需要检查连接",
-      description: "最近一次同步未完成。请检测连接，或展开手动设置排查。",
+      description: "最近一次同步未完成，请检测连接后重试。",
       lastSyncAt: input.lastFailedSyncAt,
     };
   }
@@ -36,7 +35,7 @@ export const getSyncOverview = (input: {
     return {
       state: "synced",
       title: "同步正常",
-      description: "Zettlab 正在使用当前 WebDAV 配置同步此仓库。",
+      description: "当前 Obsidian 仓库已与 Memo 保持同步。",
       lastSyncAt: input.lastSuccessfulSyncAt,
     };
   }
@@ -44,12 +43,14 @@ export const getSyncOverview = (input: {
   return {
     state: "ready",
     title: "已配置，等待首次同步",
-    description: "配置已保存。你可以立即同步，或等待自动同步执行。",
+    description: "关联已经完成，可以立即开始首次同步。",
   };
 };
 
 export const getSyncScheduleSummary = (milliseconds: number): string => {
   if (milliseconds <= 0) return "仅手动同步";
   const minutes = milliseconds / 60_000;
-  return Number.isInteger(minutes) ? `每 ${minutes} 分钟自动同步` : "按自定义间隔自动同步";
+  return Number.isInteger(minutes)
+    ? `每 ${minutes} 分钟自动同步`
+    : "按自定义间隔自动同步";
 };
