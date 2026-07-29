@@ -1,8 +1,8 @@
 # Zettlab Sync
 
-Zettlab Sync is a WebDAV-only Obsidian plugin for syncing a vault with a Zettlab NAS.
+Zettlab Sync is a WebDAV-only Obsidian plugin for syncing a vault with Zettlab Memo.
 
-It deliberately keeps Markdown plaintext on the NAS so Zettlab can index and use the notes. It does not include cloud providers, OAuth, QR pairing, a paid tier, or end-to-end encryption.
+It deliberately keeps Markdown plaintext on Memo so Zettlab can index and use the notes. It does not include cloud providers, OAuth, QR pairing, a paid tier, or end-to-end encryption.
 
 ## What it does
 
@@ -34,6 +34,14 @@ Then enable **Zettlab Sync** in Obsidian community plugins, set the WebDAV addre
 - WebDAV credentials are stored in Obsidian's local plugin data. Do not commit or share that file.
 - Automatic sync only runs while Obsidian is open.
 
+## Privacy and network use
+
+- The plugin reads and writes files in the current Obsidian vault to synchronize them with the configured WebDAV service.
+- It only contacts WebDAV addresses configured manually or supplied by Zettlab Memo during one-click setup. Managed setup accepts private-network Memo addresses and HTTPS addresses under `zettlab.com`.
+- WebDAV credentials and endpoint settings are stored locally in this vault's Obsidian plugin data.
+- The plugin contains no telemetry, advertising, or third-party analytics. One-click setup requires Zettlab Memo; manual WebDAV configuration remains available.
+- Files are synchronized as plaintext. Use HTTPS for public endpoints and back up the vault before the first sync.
+
 ## License and provenance
 
-This project is Apache-2.0. It retains and modifies Apache-2.0 code from the pre-license-split [Remotely Save](https://github.com/remotely-save/remotely-save) snapshot `7ca2d192552819777318d9d521dca45450934b4f`; all `pro/` source and PolyForm-licensed code are excluded from the current source tree. See [NOTICE](./NOTICE) and [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+This project is Apache-2.0. It retains and modifies Apache-2.0 code from the pre-license-split [Remotely Save](https://github.com/remotely-save/remotely-save) snapshot `7ca2d192552819777318d9d521dca45450934b4f`; all `pro/` source and PolyForm-licensed code are excluded from the current source tree. See [LICENSE](./LICENSE), [NOTICE](./NOTICE), and [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

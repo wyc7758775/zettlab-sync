@@ -9,7 +9,7 @@ export interface PlainRemoteCheck {
 
 /**
  * The historic sync engine expects a transform layer. This layer deliberately
- * performs no encryption: Zettlab's NAS agent needs readable Markdown.
+ * performs no encryption: Zettlab Memo needs readable Markdown.
  */
 export class PlainRemoteFs extends FakeFs {
   readonly innerFs: FakeFs;
