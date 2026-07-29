@@ -10,11 +10,15 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { STORE_ASSETS, validateReleaseContract } from "./release-contract.mjs";
+import {
+  STORE_ASSETS,
+  releaseTagFromEnvironment,
+  validateReleaseContract,
+} from "./release-contract.mjs";
 
 export function packageRelease({
   root = process.cwd(),
-  tagName = process.env.GITHUB_REF_NAME,
+  tagName = releaseTagFromEnvironment(process.env),
 } = {}) {
   const manifest = JSON.parse(
     readFileSync(join(root, "manifest.json"), "utf8")

@@ -2,6 +2,12 @@ const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
 export const STORE_ASSETS = ["main.js", "manifest.json", "styles.css"];
 
+export function releaseTagFromEnvironment(environment) {
+  return environment.GITHUB_REF_TYPE === "tag"
+    ? environment.GITHUB_REF_NAME
+    : undefined;
+}
+
 export function validateReleaseContract({
   manifest,
   packageJson,
