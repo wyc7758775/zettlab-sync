@@ -1,7 +1,7 @@
 {
   "id": "zettlab-sync",
   "name": "Zettlab Sync",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "minAppVersion": "1.5.0",
   "description": "A WebDAV-only sync plugin for Zettlab NAS and Obsidian.",
   "author": "Zettlab",
