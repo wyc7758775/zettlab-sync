@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   releaseTagFromEnvironment,
   validateReleaseContract,
+  validateStoreReviewAssets,
 } from "../../scripts/release-contract.mjs";
 
 const validContract = {
@@ -51,4 +52,53 @@ describe("Obsidian store release contract", () => {
       "0.0.3"
     );
   });
+
+  it("accepts assets that satisfy automated store review checks", () => {
+    assert.doesNotThrow(() =>
+      validateStoreReviewAssets({
+        manifest: { authorUrl: "https://github.com/wyc7758775" },
+        javascript: "queueMicrotask(task);",
+        stylesheet: ".setting-item { margin: 0; }",
+      })
+    );
+  });
+
+  for (const testCase of [
+    {
+      name: "dynamic script creation",
+      input: {
+        manifest: { authorUrl: "https://github.com/wyc7758775" },
+        javascript: 'document.createElement("script");',
+        stylesheet: ".setting-item { margin: 0; }",
+      },
+      expected: /dynamically create script elements/,
+    },
+    {
+      name: "a repository author URL",
+      input: {
+        manifest: {
+          authorUrl: "https://github.com/wyc7758775/zettlab-sync",
+        },
+        javascript: "queueMicrotask(task);",
+        stylesheet: ".setting-item { margin: 0; }",
+      },
+      expected: /profile or organization/,
+    },
+    {
+      name: "an !important declaration",
+      input: {
+        manifest: { authorUrl: "https://github.com/wyc7758775" },
+        javascript: "queueMicrotask(task);",
+        stylesheet: ".setting-item { margin: 0 !important; }",
+      },
+      expected: /must not use !important/,
+    },
+  ]) {
+    it(`rejects ${testCase.name}`, () => {
+      assert.throws(
+        () => validateStoreReviewAssets(testCase.input),
+        testCase.expected
+      );
+    });
+  }
 });

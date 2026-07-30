@@ -393,18 +393,18 @@
   padding: 0 1rem;
 }
 
-.zettlab-sync-section-content .setting-item {
-  margin: 0 !important;
-  padding: 0.85rem 0 !important;
-  border: 0 !important;
-  border-bottom: 1px solid var(--background-modifier-border) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+.zettlab-sync-advanced-section .zettlab-sync-section-content .setting-item {
+  margin: 0;
+  padding: 0.85rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.zettlab-sync-section-content .setting-item:last-child {
-  border-bottom: 0 !important;
+.zettlab-sync-advanced-section .zettlab-sync-section-content .setting-item:last-child {
+  border-bottom: 0;
 }
 
 .zettlab-sync-section-content input[type="text"],

@@ -33,3 +33,19 @@ export function validateReleaseContract({
     );
   }
 }
+
+export function validateStoreReviewAssets({ manifest, javascript, stylesheet }) {
+  if (/createElement\(\s*["']script["']\s*\)/.test(javascript)) {
+    throw new Error(
+      "Bundled JavaScript must not dynamically create script elements."
+    );
+  }
+  if (/!important\b/.test(stylesheet)) {
+    throw new Error("Plugin stylesheet must not use !important.");
+  }
+  if (/github\.com\/[^/]+\/[^/]+\/?$/.test(manifest.authorUrl ?? "")) {
+    throw new Error(
+      "manifest.authorUrl must point to a profile or organization, not a repository."
+    );
+  }
+}
