@@ -40,9 +40,18 @@
   letter-spacing: 0.14em;
 }
 
-.zettlab-sync-page-header h2 {
+.zettlab-sync-page-title.setting-item,
+.zettlab-sync-status-heading.setting-item,
+.zettlab-sync-section-heading.setting-item {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.zettlab-sync-page-title .setting-item-name {
   margin: 0;
   font-size: 1.65rem;
+  font-weight: var(--h2-weight);
   letter-spacing: -0.02em;
 }
 
@@ -118,9 +127,10 @@
   flex: 1;
 }
 
-.zettlab-sync-status-copy h3 {
+.zettlab-sync-status-heading .setting-item-name {
   margin: 0;
   font-size: 1.15rem;
+  font-weight: var(--h3-weight);
   letter-spacing: -0.01em;
 }
 
@@ -378,12 +388,16 @@
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.zettlab-sync-section-header h4 {
-  margin: 0;
-  font-size: var(--font-ui-medium);
+.zettlab-sync-section-heading {
+  flex: 1;
 }
 
-.zettlab-sync-section-header p {
+.zettlab-sync-section-heading .setting-item-name {
+  font-size: var(--font-ui-medium);
+  font-weight: var(--h4-weight);
+}
+
+.zettlab-sync-section-heading .setting-item-description {
   margin: 0.15rem 0 0;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);

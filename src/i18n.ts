@@ -141,7 +141,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
 };
 
 export const getLocale = (language?: string): Locale => {
-  const normalized = (language ?? globalThis.navigator?.language ?? "en")
+  const normalized = (language ?? "en")
     .toLowerCase()
     .replace("-", "_");
   if (normalized.startsWith("zh_tw") || normalized.startsWith("zh_hk")) {

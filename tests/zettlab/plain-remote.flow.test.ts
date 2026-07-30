@@ -54,8 +54,14 @@ class MemoryFs extends FakeFs {
 
 class MemoryTable {
   private readonly records = new Map<string, unknown>();
+  constructor(private readonly beforeRemove?: () => Promise<void>) {}
   async setItem(key: string, value: unknown): Promise<unknown> { this.records.set(key, value); return value; }
+  async removeItem(key: string): Promise<void> {
+    await this.beforeRemove?.();
+    this.records.delete(key);
+  }
   async getItems(): Promise<Record<string, Entity | null>> { return Object.fromEntries(this.records) as Record<string, Entity | null>; }
+  has(key: string): boolean { return this.records.has(key); }
   size(): number { return this.records.size; }
 }
 
@@ -118,6 +124,75 @@ describe("plain remote sync boundary", () => {
     assert.equal(new TextDecoder().decode(await remote.readFile("first.md")), "# First sync");
     assert.equal(syncPlans.size(), 1);
     assert.equal(previousRecords.size(), 1);
+  });
+
+  it("waits for obsolete history cleanup before completing the sync", async () => {
+    Object.assign(globalThis, {
+      window: {
+        moment: () => ({
+          format: () => "1970-01-01T00:00:00Z",
+          toISOString: () => "1970-01-01T00:00:00.000Z",
+        }),
+      },
+    });
+    let releaseRemoval!: () => void;
+    const removalGate = new Promise<void>((resolve) => {
+      releaseRemoval = resolve;
+    });
+    let removalStarted!: () => void;
+    const removalStart = new Promise<void>((resolve) => {
+      removalStarted = resolve;
+    });
+    const previousRecords = new MemoryTable(async () => {
+      removalStarted();
+      await removalGate;
+    });
+    await previousRecords.setItem("test-vault\tdefault\tremoved.md", {
+      key: "removed.md",
+      keyRaw: "removed.md",
+      size: 1,
+      sizeRaw: 1,
+    });
+    const database = {
+      syncPlansTbl: new MemoryTable(),
+      prevSyncRecordsTbl: previousRecords,
+    } as unknown as InternalDBs;
+    const local = new MemoryFs();
+    const remote = new MemoryFs();
+    const stableContent = new TextEncoder().encode("stable").buffer;
+    await local.writeFile("stable.md", stableContent, 1, 1);
+    await remote.writeFile("stable.md", stableContent, 1, 1);
+    let completed = false;
+
+    const running = syncer(
+      local,
+      remote,
+      new PlainRemoteFs(remote),
+      undefined,
+      database,
+      "manual",
+      "default",
+      "test-vault",
+      ".obsidian",
+      normalizeSettings(undefined),
+      () => "safety limit reached",
+      () => undefined,
+      undefined,
+      async (_trigger, error) => {
+        throw error;
+      }
+    ).then(() => {
+      completed = true;
+    });
+
+    await removalStart;
+    assert.equal(completed, false);
+    releaseRemoval();
+    await running;
+    assert.equal(
+      previousRecords.has("test-vault\tdefault\tremoved.md"),
+      false
+    );
   });
 
   it("continues a protected small-vault sync only after one-time confirmation", async () => {

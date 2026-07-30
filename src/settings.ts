@@ -60,11 +60,14 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
     const pageHeaderCopy = pageHeaderBrand.createDiv({
       cls: "zettlab-sync-page-header-copy",
     });
-    pageHeaderCopy.createEl("div", {
+    pageHeaderCopy.createDiv({
       cls: "zettlab-sync-eyebrow",
       text: "ZETTLAB MEMO",
     });
-    pageHeaderCopy.createEl("h2", { text: "同步中心" });
+    new Setting(pageHeaderCopy)
+      .setName("同步中心")
+      .setHeading()
+      .setClass("zettlab-sync-page-title");
     pageHeaderCopy.createEl("p", {
       text: "让当前 Obsidian 仓库与 Memo 安全、稳定地保持同步。",
     });
@@ -83,7 +86,10 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
     const statusIcon = statusTop.createDiv({ cls: "zettlab-sync-status-icon" });
     setIcon(statusIcon, dashboard.icon);
     const statusCopy = statusTop.createDiv({ cls: "zettlab-sync-status-copy" });
-    statusCopy.createEl("h3", { text: overview.title });
+    new Setting(statusCopy)
+      .setName(overview.title)
+      .setHeading()
+      .setClass("zettlab-sync-status-heading");
     statusCopy.createEl("p", { text: overview.description });
     const transportBadge = statusTop.createDiv({
       cls: "zettlab-sync-transport-badge",
@@ -98,7 +104,7 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       const metricIcon = metric.createDiv({ cls: "zettlab-sync-metric-icon" });
       setIcon(metricIcon, icon);
       const metricCopy = metric.createDiv();
-      metricCopy.createEl("span", { text: label });
+      metricCopy.createSpan({ text: label });
       metricCopy.createEl("strong", { text: value });
     };
     createMetric(
@@ -168,7 +174,7 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       cls: "zettlab-sync-advanced-copy",
     });
     advancedSummaryCopy.createEl("strong", { text: "高级选项" });
-    advancedSummaryCopy.createEl("span", {
+    advancedSummaryCopy.createSpan({
       text: "连接信息、同步策略与安全保护",
     });
     const advancedChevron = advancedSummary.createDiv({
@@ -201,9 +207,11 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       });
       const sectionIcon = sectionHeader.createDiv();
       setIcon(sectionIcon, icon);
-      const sectionCopy = sectionHeader.createDiv();
-      sectionCopy.createEl("h4", { text: title });
-      sectionCopy.createEl("p", { text: description });
+      new Setting(sectionHeader)
+        .setName(title)
+        .setDesc(description)
+        .setHeading()
+        .setClass("zettlab-sync-section-heading");
       return section.createDiv({ cls: "zettlab-sync-section-content" });
     };
 
