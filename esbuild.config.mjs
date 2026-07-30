@@ -22,6 +22,10 @@ esbuild
     },
     entryPoints: ["./src/main.ts"],
     bundle: true,
+    alias: {
+      immediate: "./src/compat/immediate.cjs",
+      localforage: "./node_modules/localforage/src/localforage.js",
+    },
     external: [
       "obsidian",
       "electron",

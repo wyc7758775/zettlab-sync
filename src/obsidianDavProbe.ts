@@ -7,7 +7,7 @@ export const obsidianDavProbeRequest: DavProbeRequest = async (
   headers,
   timeoutMs
 ) => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const request = requestUrl({
     url: address,
     method: "PROPFIND",
@@ -23,13 +23,13 @@ export const obsidianDavProbeRequest: DavProbeRequest = async (
     return await Promise.race([
       request,
       new Promise<null>((resolve) => {
-        timer = globalThis.setTimeout(
+        timer = window.setTimeout(
           () => resolve(null),
           Math.max(1, timeoutMs)
         );
       }),
     ]);
   } finally {
-    if (timer !== undefined) globalThis.clearTimeout(timer);
+    if (timer !== undefined) window.clearTimeout(timer);
   }
 };

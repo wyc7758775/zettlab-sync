@@ -58,7 +58,6 @@ export const getFolderLevels = (x: string, addEndingSlash = false) => {
   }
 
   const y1 = x.split("/");
-  const i = 0;
   for (let index = 0; index + 1 < y1.length; index++) {
     let k = y1.slice(0, index + 1).join("/");
     if (k === "" || k === "/") {
@@ -80,7 +79,6 @@ export const mkdirpInVault = async (thePath: string, vault: Vault) => {
     const r = await vault.adapter.exists(folder);
     // console.info(r);
     if (!r) {
-      console.info(`mkdir ${folder}`);
       await vault.adapter.mkdir(folder);
     }
   }
@@ -523,7 +521,7 @@ export const compareVersion = (x: string | null, y: string | null) => {
  * @returns
  */
 export const delay = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise((resolve) => window.setTimeout(resolve, ms));
 
 /**
  * https://github.com/remotely-save/remotely-save/issues/567
@@ -546,7 +544,7 @@ export const fixEntityListCasesInplace = (entities: { keyRaw: string }[]) => {
     const segs = e.keyRaw.split("/");
     if (e.keyRaw.endsWith("/")) {
       // folder
-      if (caseMapping.hasOwnProperty(parentFolderLower)) {
+      if (Object.prototype.hasOwnProperty.call(caseMapping, parentFolderLower)) {
         const newKeyRaw = `${caseMapping[parentFolderLower]}${segs
           .slice(-2)
           .join("/")}`;
@@ -558,7 +556,7 @@ export const fixEntityListCasesInplace = (entities: { keyRaw: string }[]) => {
       }
     } else {
       // file
-      if (caseMapping.hasOwnProperty(parentFolderLower)) {
+      if (Object.prototype.hasOwnProperty.call(caseMapping, parentFolderLower)) {
         const newKeyRaw = `${caseMapping[parentFolderLower]}${segs
           .slice(-1)
           .join("/")}`;
@@ -599,7 +597,7 @@ export const roughSizeOfObject = (object: any) => {
         if (!objectList.includes(value)) {
           objectList.push(value);
           for (const prop in value) {
-            if (value.hasOwnProperty(prop)) {
+            if (Object.prototype.hasOwnProperty.call(value, prop)) {
               stack.push(value[prop]);
             }
           }

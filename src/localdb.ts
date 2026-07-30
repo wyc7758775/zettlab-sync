@@ -291,7 +291,6 @@ export const prepareDBs = async (
     );
   }
 
-  console.info("db connected");
   return {
     db: db,
     vaultRandomID: vaultRandomID,
@@ -304,9 +303,6 @@ export const destroyDBs = async () => {
   // });
   // console.info("db deleted");
   const req = indexedDB.deleteDatabase(DEFAULT_DB_NAME);
-  req.onsuccess = (event) => {
-    console.info("db deleted");
-  };
   req.onblocked = (event) => {
     console.warn("trying to delete db but it was blocked");
   };

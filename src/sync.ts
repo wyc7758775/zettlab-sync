@@ -222,7 +222,7 @@ const ensembleMixedEnties = async (
       const prevSyncCopied = await fsEncrypt.encryptEntity(
         copyEntityAndFixTimeFormat(prevSync, serviceType)
       );
-      if (finalMappings.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(finalMappings, key)) {
         finalMappings[key].prevSync = prevSyncCopied;
       } else {
         finalMappings[key] = {
@@ -257,7 +257,7 @@ const ensembleMixedEnties = async (
     const localCopied = await fsEncrypt.encryptEntity(
       copyEntityAndFixTimeFormat(local, serviceType)
     );
-    if (finalMappings.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(finalMappings, key)) {
       finalMappings[key].local = localCopied;
     } else {
       finalMappings[key] = {
@@ -1054,7 +1054,7 @@ const dispatchOperationToActualV3 = async (
   //   )}`
   // );
   if (r.decision === "only_history") {
-    clearPrevSyncRecordByVaultAndProfile(db, vaultRandomID, profileID, key);
+    await clearPrevSyncRecordByVaultAndProfile(db, vaultRandomID, profileID, key);
   } else if (
     r.decision === "local_is_created_too_large_then_do_nothing" ||
     r.decision === "remote_is_created_too_large_then_do_nothing" ||
@@ -1276,13 +1276,6 @@ export const doActualSync = async (
     deletionOps,
     uploadDownloads,
   ];
-  const logTexts = [
-    `1. record the items already being synced`,
-    `2. create all folders from shadowest to deepest`,
-    `3. delete files and folders from deepest to shadowest`,
-    `4. upload or download files in parallel, with the desired concurrency=${concurrency}`,
-  ];
-
   let realCounter = 0;
   for (let i = 0; i < nested.length; ++i) {
     profiler?.addIndent();
@@ -1531,13 +1524,14 @@ export async function syncer(
         `finish step${step} (skip actual sync because of dry run)`
       );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     profiler?.insert("start error branch");
     everythingOk = false;
-    await errNotifyFunc?.(triggerSource, error as Error);
+    const normalizedError =
+      error instanceof Error ? error : new Error(String(error));
+    await errNotifyFunc?.(triggerSource, normalizedError);
 
     profiler?.insert("finish error branch");
-  } finally {
   }
 
   profiler?.insert("finish syncRun");

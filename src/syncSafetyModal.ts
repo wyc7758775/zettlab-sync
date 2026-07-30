@@ -48,7 +48,7 @@ class SyncSafetyModal extends Modal {
     const stats = contentEl.createDiv({ cls: "zettlab-sync-safety-stats" });
     for (const [action, count] of Object.entries(this.details.actionCounts)) {
       if (count === 0) continue;
-      stats.createEl("span", {
+      stats.createSpan({
         text: `${this.localize(
           ACTION_MESSAGE_KEYS[action as ProtectedChangeAction]
         )} ${count}`,
@@ -60,11 +60,11 @@ class SyncSafetyModal extends Modal {
     });
     for (const item of this.details.items) {
       const row = list.createEl("li");
-      row.createEl("span", {
+      row.createSpan({
         cls: "zettlab-sync-safety-action",
         text: this.localize(ACTION_MESSAGE_KEYS[item.action]),
       });
-      row.createEl("span", {
+      row.createSpan({
         cls: "zettlab-sync-safety-path",
         text: item.path,
       });

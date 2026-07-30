@@ -14,6 +14,7 @@ describe("Obsidian store release package flow", () => {
           id: "zettlab-sync",
           version: "0.0.3",
           minAppVersion: "1.5.0",
+          authorUrl: "https://github.com/wyc7758775",
         })
       );
       writeFileSync(

@@ -159,7 +159,7 @@ function basicAuthorization(username: string, password: string): string {
   const bytes = new TextEncoder().encode(`${username}:${password}`);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return `Basic ${globalThis.btoa(binary)}`;
+  return `Basic ${btoa(binary)}`;
 }
 
 function headerValue(headers: Record<string, string>, name: string): string {

@@ -45,7 +45,7 @@ export const serializeMetadataOnRemote = (x: MetadataOnRemote) => {
   const y = x;
 
   if (y["version"] === undefined) {
-    y["version"] === DEFAULT_VERSION_FOR_METADATAONREMOTE;
+    y["version"] = DEFAULT_VERSION_FOR_METADATAONREMOTE;
   }
   if (y["generatedWhen"] === undefined) {
     y["generatedWhen"] = Date.now();
@@ -57,7 +57,7 @@ export const serializeMetadataOnRemote = (x: MetadataOnRemote) => {
   const z = {
     readme: DEFAULT_README_FOR_METADATAONREMOTE,
     d: reverseString(
-      base64url.stringify(Buffer.from(JSON.stringify(x), "utf-8"), {
+      base64url.stringify(new TextEncoder().encode(JSON.stringify(x)), {
         pad: false,
       })
     ),
@@ -74,16 +74,22 @@ export const deserializeMetadataOnRemote = (x: string | ArrayBuffer) => {
     y1 = new TextDecoder().decode(x);
   }
 
-  let y2: any;
+  let y2: unknown;
   try {
     y2 = JSON.parse(y1);
-  } catch (e) {
+  } catch {
     throw new Error(
       `invalid remote meta data file with first few chars: ${y1.slice(0, 5)}`
     );
   }
 
-  if (!("readme" in y2 && "d" in y2)) {
+  if (
+    typeof y2 !== "object" ||
+    y2 === null ||
+    !("readme" in y2) ||
+    !("d" in y2) ||
+    typeof y2.d !== "string"
+  ) {
     throw new Error(
       'invalid remote meta data file (no "readme" or "d" fields)!'
     );
@@ -91,22 +97,19 @@ export const deserializeMetadataOnRemote = (x: string | ArrayBuffer) => {
 
   let y3: string;
   try {
-    y3 = (
-      base64url.parse(reverseString(y2["d"]), {
-        out: Buffer.allocUnsafe as any,
-        loose: true,
-      }) as Buffer
-    ).toString("utf-8");
-  } catch (e) {
+    y3 = new TextDecoder().decode(
+      base64url.parse(reverseString(y2.d), { loose: true })
+    );
+  } catch {
     throw new Error('invalid remote meta data file (invalid "d" field)!');
   }
 
   let y4: MetadataOnRemote;
   try {
     y4 = JSON.parse(y3) as MetadataOnRemote;
-  } catch (e) {
+  } catch {
     throw new Error(
-      `invalid remote meta data file with \"d\" field with first few chars: ${y3.slice(
+      `invalid remote meta data file with "d" field with first few chars: ${y3.slice(
         0,
         5
       )}`

@@ -14,6 +14,7 @@ import {
   STORE_ASSETS,
   releaseTagFromEnvironment,
   validateReleaseContract,
+  validateStoreReviewAssets,
 } from "./release-contract.mjs";
 
 export function packageRelease({
@@ -30,6 +31,11 @@ export function packageRelease({
     readFileSync(join(root, "versions.json"), "utf8")
   );
   validateReleaseContract({ manifest, packageJson, versions, tagName });
+  validateStoreReviewAssets({
+    manifest,
+    javascript: readFileSync(join(root, "main.js"), "utf8"),
+    stylesheet: readFileSync(join(root, "styles.css"), "utf8"),
+  });
 
   const releaseDirectory = join(root, "release");
   const pluginDirectory = join(releaseDirectory, manifest.id);
