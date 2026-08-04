@@ -11,6 +11,7 @@ describe("plugin settings persistence", () => {
     const settings = {
       ...DEFAULT_SETTINGS,
       ignorePaths: ["笔记/草稿.md"],
+      ignoreNodeModules: false,
     };
 
     assert.deepEqual(

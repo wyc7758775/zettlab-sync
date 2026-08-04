@@ -37,6 +37,10 @@ import {
 } from "./misc";
 import type { Profiler } from "./profiler";
 import {
+  getNodeModulesParentFolder,
+  shouldIgnoreNodeModulesPath,
+} from "./pathFilters";
+import {
   ProtectModifyError,
   buildProtectModifyDetails,
   type ProtectModifyDetails,
@@ -108,10 +112,14 @@ const isSkipItemByName = (
   syncConfigDir: boolean,
   syncUnderscoreItems: boolean,
   configDir: string,
-  ignorePaths: string[]
+  ignorePaths: string[],
+  ignoreNodeModules: boolean
 ) => {
   if (key === undefined) {
     throw Error(`isSkipItemByName meets undefinded key!`);
+  }
+  if (shouldIgnoreNodeModulesPath(key, ignoreNodeModules)) {
+    return true;
   }
   if (ignorePaths !== undefined && ignorePaths.length > 0) {
     for (const r of ignorePaths) {
@@ -154,6 +162,7 @@ const ensembleMixedEnties = async (
   configDir: string,
   syncUnderscoreItems: boolean,
   ignorePaths: string[],
+  ignoreNodeModules: boolean,
   fsEncrypt: PlainRemoteFs,
   serviceType: SUPPORTED_SERVICES_TYPE,
 
@@ -166,25 +175,31 @@ const ensembleMixedEnties = async (
   profiler?.insertSize("sizeof remoteEntityList", remoteEntityList);
 
   const finalMappings: SyncPlanType = {};
+  const preservedFolders = new Set<string>();
 
   // remote has to be first
   for (const remote of remoteEntityList) {
-    const remoteCopied = ensureMTimeOfRemoteEntityValid(
-      copyEntityAndFixTimeFormat(remote, serviceType)
-    );
-
-    const key = remoteCopied.key!;
+    const key = remote.key!;
+    if (shouldIgnoreNodeModulesPath(key, ignoreNodeModules)) {
+      const parentFolder = getNodeModulesParentFolder(key);
+      if (parentFolder) preservedFolders.add(parentFolder);
+      continue;
+    }
     if (
       isSkipItemByName(
         key,
         syncConfigDir,
         syncUnderscoreItems,
         configDir,
-        ignorePaths
+        ignorePaths,
+        ignoreNodeModules
       )
     ) {
       continue;
     }
+    const remoteCopied = ensureMTimeOfRemoteEntityValid(
+      copyEntityAndFixTimeFormat(remote, serviceType)
+    );
 
     finalMappings[key] = {
       key: key,
@@ -212,7 +227,8 @@ const ensembleMixedEnties = async (
           syncConfigDir,
           syncUnderscoreItems,
           configDir,
-          ignorePaths
+          ignorePaths,
+          ignoreNodeModules
         )
       ) {
         continue;
@@ -241,13 +257,19 @@ const ensembleMixedEnties = async (
   // (we don't consume prevSync here because it gains no benefit)
   for (const local of localEntityList) {
     const key = local.key!;
+    if (shouldIgnoreNodeModulesPath(key, ignoreNodeModules)) {
+      const parentFolder = getNodeModulesParentFolder(key);
+      if (parentFolder) preservedFolders.add(parentFolder);
+      continue;
+    }
     if (
       isSkipItemByName(
         key,
         syncConfigDir,
         syncUnderscoreItems,
         configDir,
-        ignorePaths
+        ignorePaths,
+        ignoreNodeModules
       )
     ) {
       continue;
@@ -265,6 +287,12 @@ const ensembleMixedEnties = async (
         local: localCopied,
       };
     }
+  }
+
+  for (const folder of preservedFolders) {
+    const mapping = finalMappings[folder];
+    if (mapping?.local) mapping.local.preserveEmptyFolder = true;
+    if (mapping?.remote) mapping.remote.preserveEmptyFolder = true;
   }
 
   profiler?.insert("ensembleMixedEnties: finish local");
@@ -358,6 +386,11 @@ const getSyncPlanInplace = async (
           mixedEntry.change = true;
         }
         keptFolder.delete(key); // no need to save it in the Set later
+      } else if (local?.preserveEmptyFolder || remote?.preserveEmptyFolder) {
+        mixedEntry.decisionBranch = 115;
+        mixedEntry.decision = "folder_to_skip";
+        mixedEntry.change = false;
+        keptFolder.add(getParentFolder(key));
       } else {
         if (howToCleanEmptyFolder === "skip") {
           mixedEntry.decisionBranch = 105;
@@ -1445,11 +1478,36 @@ export async function syncer(
     await notifyFunc?.(triggerSource, step);
     await ribboonFunc?.(triggerSource, step);
     await statusBarFunc?.(triggerSource, step, everythingOk);
-    const prevSyncEntityList = await getAllPrevSyncRecordsByVaultAndProfile(
+    let prevSyncEntityList = await getAllPrevSyncRecordsByVaultAndProfile(
       db,
       vaultRandomID,
       profileID
     );
+    if (settings.ignoreNodeModules ?? true) {
+      const retainedHistory: Entity[] = [];
+      let pendingHistoryRemovals: Promise<void>[] = [];
+      for (const previous of prevSyncEntityList) {
+        const key = previous.key;
+        if (key && shouldIgnoreNodeModulesPath(key, true)) {
+          pendingHistoryRemovals.push(
+            clearPrevSyncRecordByVaultAndProfile(
+              db,
+              vaultRandomID,
+              profileID,
+              key
+            )
+          );
+          if (pendingHistoryRemovals.length === 16) {
+            await Promise.all(pendingHistoryRemovals);
+            pendingHistoryRemovals = [];
+          }
+        } else {
+          retainedHistory.push(previous);
+        }
+      }
+      await Promise.all(pendingHistoryRemovals);
+      prevSyncEntityList = retainedHistory;
+    }
     // console.debug(`prevSyncEntityList:`);
     // console.debug(prevSyncEntityList);
     profiler?.insert(`finish step${step} (prev sync)`);
@@ -1466,6 +1524,7 @@ export async function syncer(
       configDir,
       settings.syncUnderscoreItems ?? false,
       settings.ignorePaths ?? [],
+      settings.ignoreNodeModules ?? true,
       fsEncrypt,
       settings.serviceType,
       profiler

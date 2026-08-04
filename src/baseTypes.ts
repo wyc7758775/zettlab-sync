@@ -62,6 +62,7 @@ export interface RemotelySavePluginSettings {
   lang: "auto";
   skipSizeLargerThan: number;
   ignorePaths: string[];
+  ignoreNodeModules: boolean;
   enableStatusBarInfo: boolean;
   deleteToWhere: "system" | "obsidian";
   conflictAction: ConflictActionType;
@@ -116,6 +117,8 @@ export interface Entity {
   sizeRaw: number;
   hash?: string;
   etag?: string;
+  /** Prevent empty-folder cleanup when the folder contains an ignored subtree. */
+  preserveEmptyFolder?: boolean;
   synthesizedFolder?: boolean;
   synthesizedFile?: boolean;
 }

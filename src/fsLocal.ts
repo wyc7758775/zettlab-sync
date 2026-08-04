@@ -8,6 +8,10 @@ import { FakeFs } from "./fsAll";
 import { TFile, TFolder, type Vault } from "obsidian";
 import { mkdirpInVault, statFix, unixTimeToStr } from "./misc";
 import { listFilesInObsFolder } from "./obsFolderLister";
+import {
+  getNodeModulesParentFolder,
+  shouldIgnoreNodeModulesPath,
+} from "./pathFilters";
 import type { Profiler } from "./profiler";
 
 export class FakeFsLocal extends FakeFs {
@@ -18,6 +22,7 @@ export class FakeFsLocal extends FakeFs {
   pluginID: string;
   profiler: Profiler | undefined;
   deleteToWhere: "obsidian" | "system";
+  ignoreNodeModules: boolean;
   kind: "local";
   constructor(
     vault: Vault,
@@ -26,7 +31,8 @@ export class FakeFsLocal extends FakeFs {
     configDir: string,
     pluginID: string,
     profiler: Profiler | undefined,
-    deleteToWhere: "obsidian" | "system"
+    deleteToWhere: "obsidian" | "system",
+    ignoreNodeModules = true
   ) {
     super();
 
@@ -37,6 +43,7 @@ export class FakeFsLocal extends FakeFs {
     this.pluginID = pluginID;
     this.profiler = profiler;
     this.deleteToWhere = deleteToWhere;
+    this.ignoreNodeModules = ignoreNodeModules;
     this.kind = "local";
   }
 
@@ -44,10 +51,16 @@ export class FakeFsLocal extends FakeFs {
     this.profiler?.addIndent();
     this.profiler?.insert("enter walk for local");
     const local: Entity[] = [];
+    const preservedFolders = new Set<string>();
 
     const localTAbstractFiles = this.vault.getAllLoadedFiles();
     this.profiler?.insert("finish getting walk for local");
     for (const entry of localTAbstractFiles) {
+      if (shouldIgnoreNodeModulesPath(entry.path, this.ignoreNodeModules)) {
+        const parentFolder = getNodeModulesParentFolder(entry.path);
+        if (parentFolder) preservedFolders.add(parentFolder);
+        continue;
+      }
       let r: Entity | undefined = undefined;
       let key = entry.path;
       if (key.startsWith("/")) {
@@ -110,13 +123,20 @@ export class FakeFsLocal extends FakeFs {
         this.configDir,
         this.vault,
         this.pluginID,
-        bookmarksOnly
+        bookmarksOnly,
+        this.ignoreNodeModules
       );
       // console.debug(`syncFiles in obs: ${JSON.stringify(syncFiles, null, 2)}`);
       for (const f of syncFiles) {
         local.push(f);
       }
       this.profiler?.insert("finish syncConfigDir");
+    }
+
+    for (const entity of local) {
+      if (entity.key && preservedFolders.has(entity.key)) {
+        entity.preserveEmptyFolder = true;
+      }
     }
 
     this.profiler?.insert("finish walk for local");

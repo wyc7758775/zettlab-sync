@@ -2,11 +2,8 @@
  * Derived from Remotely Save commit 7ca2d192552819777318d9d521dca45450934b4f
  * (Apache-2.0). Modified by Zettlab.
  */
-import { Queue } from "@fyears/tsqueue";
 import { getReasonPhrase } from "http-status-codes/build/cjs/utils-functions";
-import chunk from "lodash/chunk";
 import cloneDeep from "lodash/cloneDeep";
-import flatten from "lodash/flatten";
 import { Platform, type RequestUrlParam, requestUrl } from "obsidian";
 import type {
   FileStat,
@@ -19,6 +16,8 @@ import type { Entity, WebdavConfig } from "./baseTypes";
 import { VALID_REQURL } from "./baseTypesObs";
 import { FakeFs } from "./fsAll";
 import { bufferToArrayBuffer, splitFileSizeToChunkRanges } from "./misc";
+import { shouldIgnoreNodeModulesPath } from "./pathFilters";
+import { getWebdavRelativePath, walkWebdavTree } from "./webdavTreeWalker";
 
 /**
  * https://stackoverflow.com/questions/32850898/how-to-check-if-a-string-has-any-non-iso-8859-1-characters-with-javascript
@@ -168,36 +167,8 @@ const getWebdavPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
   return key;
 };
 
-/**
- * sometimes the path startswith /../../......
- * we want to make sure the path is compatible
- */
-const stripLeadingPath = (x: string) => {
-  let y = x;
-  while (y.startsWith("/..")) {
-    y = y.slice("/..".length);
-  }
-  return y;
-};
-
-const getNormPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
-  const strippedFileOrFolderPath = stripLeadingPath(fileOrFolderPath);
-  if (
-    !(
-      strippedFileOrFolderPath === `/${remoteBaseDir}` ||
-      strippedFileOrFolderPath.startsWith(`/${remoteBaseDir}/`)
-    )
-  ) {
-    throw Error(
-      `"${fileOrFolderPath}" after stripping doesn't starts with "/${remoteBaseDir}/"`
-    );
-  }
-  const result = strippedFileOrFolderPath.slice(`/${remoteBaseDir}/`.length);
-  return result;
-};
-
 const fromWebdavItemToEntity = (x: FileStat, remoteBaseDir: string): Entity => {
-  let key = getNormPath(x.filename, remoteBaseDir);
+  let key = getWebdavRelativePath(x.filename, remoteBaseDir);
 
   if (x.type === "directory" && !key.endsWith("/")) {
     key = `${key}/`;
@@ -259,6 +230,7 @@ export class FakeFsWebdav extends FakeFs {
   client!: WebDAVClient;
   vaultFolderExists: boolean;
   saveUpdatedConfigFunc: () => Promise<any>;
+  ignoreNodeModules: boolean;
 
   supportApachePartial: boolean;
   supportSabrePartial: boolean;
@@ -268,7 +240,8 @@ export class FakeFsWebdav extends FakeFs {
   constructor(
     webdavConfig: WebdavConfig,
     vaultName: string,
-    saveUpdatedConfigFunc: () => Promise<any>
+    saveUpdatedConfigFunc: () => Promise<any>,
+    ignoreNodeModules = true
   ) {
     super();
     this.kind = "webdav";
@@ -277,6 +250,7 @@ export class FakeFsWebdav extends FakeFs {
     this.remoteBaseDir = this.webdavConfig.remoteBaseDir || vaultName || "";
     this.vaultFolderExists = false;
     this.saveUpdatedConfigFunc = saveUpdatedConfigFunc;
+    this.ignoreNodeModules = ignoreNodeModules;
 
     this.supportApachePartial = false;
     this.supportSabrePartial = false;
@@ -432,7 +406,9 @@ export class FakeFsWebdav extends FakeFs {
     await this._init();
 
     let contents = [] as FileStat[];
+    const preservedFolders = new Set<string>();
     if (
+      this.ignoreNodeModules ||
       this.webdavConfig.depth === "auto" ||
       this.webdavConfig.depth === "auto_unknown" ||
       this.webdavConfig.depth === "auto_1" ||
@@ -441,55 +417,32 @@ export class FakeFsWebdav extends FakeFs {
       this.webdavConfig.address.includes("jianguoyun.com") ||
       this.webdavConfig.address.includes("teracloud.jp")
     ) {
-      // the remote doesn't support infinity propfind,
-      // we need to do a bfs here
-      const q = new Queue([`/${this.remoteBaseDir}`]);
-      const CHUNK_SIZE = 10;
-      while (q.length > 0) {
-        const itemsToFetch: string[] = [];
-        while (q.length > 0) {
-          itemsToFetch.push(q.pop()!);
-        }
-        const itemsToFetchChunks = chunk(itemsToFetch, CHUNK_SIZE);
-        // console.debug(itemsToFetchChunks);
-        const subContents = [] as FileStat[];
-        for (const singleChunk of itemsToFetchChunks) {
-          const r = singleChunk.map(async (x) => {
-            let k = (await this.client.getDirectoryContents(x, {
-              deep: false,
-              details: false /* no need for verbose details here */,
-              // TODO: to support .obsidian,
-              // we need to load all files including dot,
-              // anyway to reduce the resources?
-              // glob: "/**" /* avoid dot files by using glob */,
-            })) as FileStat[];
-            k = k.filter((sub) => stripLeadingPath(sub.filename) !== x);
-            return k;
-          });
-          const r3 = await Promise.all(r);
-          for (const r4 of r3) {
-            if (
-              this.webdavConfig.address.includes("jianguoyun.com") &&
-              r4.length >= 749
-            ) {
-              // https://help.jianguoyun.com/?p=2064
-              // no more than 750 per request
-              throw Error(
-                `出错：坚果云 api 有限制，文件列表加载不全。终止同步！`
-              );
-            }
+      contents = await walkWebdavTree(
+        this.remoteBaseDir,
+        async (path) =>
+          (await this.client.getDirectoryContents(path, {
+            deep: false,
+            details: false /* no need for verbose details here */,
+            // TODO: to support .obsidian,
+            // we need to load all files including dot,
+            // anyway to reduce the resources?
+            // glob: "/**" /* avoid dot files by using glob */,
+          })) as FileStat[],
+        this.ignoreNodeModules,
+        (listing) => {
+          if (
+            this.webdavConfig.address.includes("jianguoyun.com") &&
+            listing.length >= 749
+          ) {
+            // https://help.jianguoyun.com/?p=2064
+            // no more than 750 per request
+            throw Error(
+              `出错：坚果云 api 有限制，文件列表加载不全。终止同步！`
+            );
           }
-          const r2 = flatten(r3);
-          subContents.push(...r2);
-        }
-        for (let i = 0; i < subContents.length; ++i) {
-          const f = subContents[i];
-          contents.push(f);
-          if (f.type === "directory") {
-            q.push(stripLeadingPath(f.filename));
-          }
-        }
-      }
+        },
+        (path) => preservedFolders.add(path)
+      );
     } else {
       // the remote supports infinity propfind
       contents = (await this.client.getDirectoryContents(
@@ -506,7 +459,13 @@ export class FakeFsWebdav extends FakeFs {
     }
 
     const result = contents
-      .map((x) => fromWebdavItemToEntity(x, this.remoteBaseDir))
+      .map((x) => {
+        const entity = fromWebdavItemToEntity(x, this.remoteBaseDir);
+        if (preservedFolders.has(entity.keyRaw)) {
+          entity.preserveEmptyFolder = true;
+        }
+        return entity;
+      })
       .filter((x) => x.keyRaw !== "/");
     return result;
   }
@@ -522,6 +481,13 @@ export class FakeFsWebdav extends FakeFs {
       }
     )) as FileStat[];
     return contents
+      .filter(
+        (item) =>
+          !shouldIgnoreNodeModulesPath(
+            getWebdavRelativePath(item.filename, this.remoteBaseDir),
+            this.ignoreNodeModules
+          )
+      )
       .map((x) => fromWebdavItemToEntity(x, this.remoteBaseDir))
       .filter((x) => x.keyRaw !== "/");
   }

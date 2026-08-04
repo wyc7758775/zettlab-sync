@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: RemotelySavePluginSettings = {
   lang: "auto",
   skipSizeLargerThan: -1,
   ignorePaths: [],
+  ignoreNodeModules: true,
   enableStatusBarInfo: true,
   deleteToWhere: "system",
   conflictAction: "keep_newer",
@@ -78,6 +79,10 @@ export const normalizeSettings = (
     skipSizeLargerThan:
       source.skipSizeLargerThan ?? DEFAULT_SETTINGS.skipSizeLargerThan,
     ignorePaths: source.ignorePaths ?? DEFAULT_SETTINGS.ignorePaths,
+    ignoreNodeModules:
+      typeof source.ignoreNodeModules === "boolean"
+        ? source.ignoreNodeModules
+        : DEFAULT_SETTINGS.ignoreNodeModules,
     enableStatusBarInfo:
       source.enableStatusBarInfo ?? DEFAULT_SETTINGS.enableStatusBarInfo,
     deleteToWhere: source.deleteToWhere ?? DEFAULT_SETTINGS.deleteToWhere,

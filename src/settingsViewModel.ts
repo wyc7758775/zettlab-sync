@@ -1,4 +1,13 @@
-import type { ObsidianDavTransport } from "./baseTypes";
+import type {
+  ObsidianDavTransport,
+  RemotelySavePluginSettings,
+} from "./baseTypes";
+import {
+  normalizeLanDavAddress,
+  normalizePublicDavAddress,
+  normalizeZettlabDavEndpoints,
+} from "./davEndpoints";
+import { t, type MessageKey } from "./i18n";
 import type { SyncOverview } from "./syncOverview";
 import { getSyncScheduleSummary } from "./syncOverview";
 
@@ -12,10 +21,78 @@ export type SettingsDashboardModel = {
   schedule: string;
 };
 
+export type SettingsConnectionModel = {
+  mode: "dual" | "lan-only" | "public-only" | "legacy" | "unconfigured";
+  modeLabel: string;
+  modeDescription: string;
+  lanAddress: string;
+  publicAddress: string;
+  transport: string;
+};
+
+const getTransportLabel = (
+  activeTransport: ObsidianDavTransport | undefined,
+  language?: string
+): string =>
+  activeTransport === "lan"
+    ? t("transportLan", {}, language)
+    : activeTransport === "public"
+      ? t("transportPublic", {}, language)
+      : activeTransport === "manual"
+        ? t("settingsTransportManual", {}, language)
+        : t("settingsTransportAutoPending", {}, language);
+
+export const getSettingsConnectionModel = (
+  settings: RemotelySavePluginSettings,
+  activeTransport: ObsidianDavTransport | undefined,
+  language?: string
+): SettingsConnectionModel => {
+  const endpoints = normalizeZettlabDavEndpoints(
+    settings.webdav.zettlabEndpoints
+  );
+  const legacyAddress = endpoints ? "" : settings.webdav.address.trim();
+  const lanAddress =
+    endpoints?.lan ?? normalizeLanDavAddress(legacyAddress) ?? "";
+  const publicAddress =
+    endpoints?.public ?? normalizePublicDavAddress(legacyAddress) ?? "";
+  const mode = endpoints
+    ? endpoints.lan && endpoints.public
+      ? "dual"
+      : endpoints.lan
+        ? "lan-only"
+        : "public-only"
+    : legacyAddress
+      ? "legacy"
+      : "unconfigured";
+  const modeKey: MessageKey =
+    mode === "dual"
+      ? "settingsModeDual"
+      : mode === "lan-only"
+        ? "settingsModeLanOnly"
+        : mode === "public-only"
+          ? "settingsModePublicOnly"
+          : mode === "legacy"
+            ? "settingsModeLegacy"
+            : "settingsModeUnconfigured";
+  const modeLabel = t(modeKey, {}, language);
+  return {
+    mode,
+    modeLabel,
+    modeDescription:
+      mode === "legacy"
+        ? `${modeLabel} - ${t("settingsLegacyHint", {}, language)}`
+        : modeLabel,
+    lanAddress,
+    publicAddress,
+    transport: getTransportLabel(activeTransport, language),
+  };
+};
+
 export const getSettingsDashboardModel = (
   overview: SyncOverview,
   activeTransport: ObsidianDavTransport | undefined,
-  autoRunEveryMilliseconds: number
+  autoRunEveryMilliseconds: number,
+  language?: string
 ): SettingsDashboardModel => ({
   tone:
     overview.state === "synced"
@@ -31,14 +108,7 @@ export const getSettingsDashboardModel = (
         : overview.state === "not-configured"
           ? "unplug"
           : "clock-3",
-  transport:
-    activeTransport === "lan"
-      ? "局域网"
-      : activeTransport === "public"
-        ? "公网"
-        : activeTransport === "manual"
-          ? "手动地址"
-          : "自动选择",
+  transport: getTransportLabel(activeTransport, language),
   lastSyncLabel:
     overview.lastSyncAt === undefined
       ? "最近同步"

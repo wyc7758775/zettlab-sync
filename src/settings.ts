@@ -2,14 +2,20 @@
  * Derived from Remotely Save commit 7ca2d192552819777318d9d521dca45450934b4f
  * (Apache-2.0). Modified by Zettlab.
  */
-import { Notice, PluginSettingTab, Setting, setIcon } from "obsidian";
+import { getLanguage, Notice, PluginSettingTab, Setting, setIcon } from "obsidian";
 import type { ConflictActionType } from "./baseTypes";
+import { t, type MessageKey } from "./i18n";
 import type ZettlabSyncPlugin from "./main";
+import {
+  ManualLanAttemptGuard,
+  prepareManualLanUpdateIfCurrent,
+} from "./manualLanSettings";
+import { obsidianDavProbeRequest } from "./obsidianDavProbe";
 import {
   SYNC_ON_SAVE_DELAY_MILLISECONDS,
   parseProtectModifyPercentage,
 } from "./settingsModel";
-import { getSettingsDashboardModel } from "./settingsViewModel";
+import { getSettingsConnectionModel, getSettingsDashboardModel } from "./settingsViewModel";
 import { ZETTLAB_LOGO_DATA_URL } from "./zettlabLogo";
 export { DEFAULT_SETTINGS, normalizeSettings } from "./settingsModel";
 
@@ -41,12 +47,16 @@ const appendZettlabLogo = (parent: HTMLElement): void => {
 };
 
 export class ZettlabSyncSettingTab extends PluginSettingTab {
+  private readonly manualLanAttempts = new ManualLanAttemptGuard();
+
   constructor(private readonly plugin: ZettlabSyncPlugin) {
     super(plugin.app, plugin);
   }
 
   display(): void {
     const { containerEl } = this;
+    const language = getLanguage();
+    const localize = (key: MessageKey): string => t(key, {}, language);
     containerEl.empty();
     containerEl.addClass("zettlab-sync-settings");
 
@@ -77,7 +87,8 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
     const dashboard = getSettingsDashboardModel(
       overview,
       activeTransport,
-      this.plugin.settings.autoRunEveryMilliseconds
+      this.plugin.settings.autoRunEveryMilliseconds,
+      language
     );
     const statusPanel = containerEl.createDiv({
       cls: `zettlab-sync-dashboard is-${dashboard.tone}`,
@@ -220,21 +231,122 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       "仅在自动关联不可用或排障时手动修改",
       "link-2"
     );
+    const connection = getSettingsConnectionModel(
+      this.plugin.settings,
+      activeTransport,
+      language
+    );
     new Setting(connectionSection)
-      .setName("WebDAV 地址")
-      .setDesc("Memo 的同步服务地址")
-      .addText((text) =>
-        text
-          .setPlaceholder("https://…")
-          .setValue(this.plugin.settings.webdav.address)
-          .onChange(async (value) =>
-            saveText(this.plugin, () => {
-              this.plugin.settings.webdav.address = value.trim();
-              this.plugin.settings.webdav.zettlabEndpoints = undefined;
-              this.plugin.clearActiveTransport();
-            })
-          )
+      .setName(localize("settingsConfigMode"))
+      .setDesc(connection.modeDescription);
+    new Setting(connectionSection)
+      .setName(localize("settingsCurrentTransport"))
+      .setDesc(connection.transport);
+
+    let lanDraft = connection.lanAddress;
+    let setLanInputDisabled = (_disabled: boolean): void => undefined;
+    new Setting(connectionSection)
+      .setName(localize("settingsLanAddress"))
+      .setDesc(localize("settingsLanAddressDescription"))
+      .addText((text) => {
+        setLanInputDisabled = (disabled) => {
+          text.setDisabled(disabled);
+        };
+        return text
+          .setPlaceholder("http://192.168.x.x:9091/dav/")
+          .setValue(connection.lanAddress)
+          .onChange((value) => {
+            lanDraft = value;
+          });
+      })
+      .addButton((button) =>
+        button.setButtonText(localize("settingsLanSave")).onClick(async () => {
+          button.setDisabled(true);
+          setLanInputDisabled(true);
+          const requestedLanAddress = lanDraft.trim();
+          const attemptRevision = this.manualLanAttempts.begin();
+          const previous = this.plugin.settings;
+          const previousRevision = this.plugin.getSettingsRevision();
+          const result = await prepareManualLanUpdateIfCurrent(
+            previous,
+            requestedLanAddress,
+            obsidianDavProbeRequest,
+            () =>
+              this.manualLanAttempts.isCurrent(attemptRevision) &&
+              this.plugin.settings === previous &&
+              this.plugin.getSettingsRevision() === previousRevision
+          );
+          if (!result.ok) {
+            const messageKey: MessageKey =
+              result.reason === "invalid_lan"
+                ? "settingsLanInvalid"
+                : result.reason === "public_required"
+                  ? "settingsLanPublicRequired"
+                  : result.reason === "stale_configuration"
+                    ? "settingsLanStale"
+                    : "settingsLanUnreachable";
+            new Notice(localize(messageKey));
+            if (result.reason === "stale_configuration") {
+              if (this.manualLanAttempts.isCurrent(attemptRevision)) {
+                this.display();
+              }
+              return;
+            }
+            button.setDisabled(false);
+            setLanInputDisabled(false);
+            return;
+          }
+          let saveRevision: number | undefined;
+          try {
+            this.plugin.settings = result.settings;
+            this.plugin.clearActiveTransport();
+            const savePromise = this.plugin.saveSettings();
+            saveRevision = this.plugin.getSettingsRevision();
+            await savePromise;
+            if (
+              !this.manualLanAttempts.isCurrent(attemptRevision) ||
+              this.plugin.settings !== result.settings ||
+              this.plugin.getSettingsRevision() !== saveRevision
+            ) {
+              new Notice(localize("settingsLanStale"));
+              return;
+            }
+            new Notice(
+              requestedLanAddress === ""
+                ? localize("settingsLanCleared")
+                : localize("settingsLanSaved")
+            );
+          } catch (error) {
+            console.error("Failed to save manual LAN address", error);
+            const stillCurrent =
+              this.manualLanAttempts.isCurrent(attemptRevision) &&
+              this.plugin.settings === result.settings &&
+              this.plugin.getSettingsRevision() === saveRevision;
+            if (stillCurrent) {
+              this.plugin.settings = previous;
+            }
+            new Notice(
+              localize(
+                stillCurrent ? "settingsLanSaveFailed" : "settingsLanStale"
+              )
+            );
+          } finally {
+            if (this.manualLanAttempts.isCurrent(attemptRevision)) {
+              this.display();
+            }
+          }
+        })
       );
+    new Setting(connectionSection)
+      .setName(localize("settingsPublicAddress"))
+      .setDesc(localize("settingsPublicAddressDescription"))
+      .addText((text) => {
+        text
+          .setPlaceholder(localize("settingsNotConfigured"))
+          .setValue(connection.publicAddress);
+        text.inputEl.readOnly = true;
+        return text;
+      });
     new Setting(connectionSection)
       .setName("App 密码")
       .setDesc("关联时自动生成，仅供当前仓库同步使用")
@@ -352,6 +464,18 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
                 megabytes > 0 ? megabytes * 1024 * 1024 : -1;
             });
           })
+      );
+    new Setting(safetySection)
+      .setName(localize("settingsIgnoreNodeModules"))
+      .setDesc(localize("settingsIgnoreNodeModulesDescription"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.ignoreNodeModules ?? true)
+          .onChange(async (enabled) =>
+            saveText(this.plugin, () => {
+              this.plugin.settings.ignoreNodeModules = enabled;
+            })
+          )
       );
     new Setting(safetySection)
       .setName("忽略路径规则")

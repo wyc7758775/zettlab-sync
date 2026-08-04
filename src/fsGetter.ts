@@ -11,5 +11,10 @@ export function getClient(
   vaultName: string,
   saveUpdatedConfigFunc: () => Promise<void>
 ): FakeFsWebdav {
-  return new FakeFsWebdav(settings.webdav, vaultName, saveUpdatedConfigFunc);
+  return new FakeFsWebdav(
+    settings.webdav,
+    vaultName,
+    saveUpdatedConfigFunc,
+    settings.ignoreNodeModules ?? true
+  );
 }

@@ -18,6 +18,31 @@ export type MessageKey =
   | "statusSyncFailed"
   | "transportLan"
   | "transportPublic"
+  | "settingsTransportManual"
+  | "settingsTransportAutoPending"
+  | "settingsModeDual"
+  | "settingsModeLanOnly"
+  | "settingsModePublicOnly"
+  | "settingsModeLegacy"
+  | "settingsModeUnconfigured"
+  | "settingsLegacyHint"
+  | "settingsConfigMode"
+  | "settingsCurrentTransport"
+  | "settingsLanAddress"
+  | "settingsLanAddressDescription"
+  | "settingsLanSave"
+  | "settingsLanInvalid"
+  | "settingsLanPublicRequired"
+  | "settingsLanUnreachable"
+  | "settingsLanStale"
+  | "settingsLanCleared"
+  | "settingsLanSaved"
+  | "settingsLanSaveFailed"
+  | "settingsPublicAddress"
+  | "settingsPublicAddressDescription"
+  | "settingsNotConfigured"
+  | "settingsIgnoreNodeModules"
+  | "settingsIgnoreNodeModulesDescription"
   | "noReachableEndpoint"
   | "commandSyncNow"
   | "commandTestConnection"
@@ -53,6 +78,40 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusSyncFailed: "Sync failed",
     transportLan: "LAN",
     transportPublic: "Public network",
+    settingsTransportManual: "Manual address",
+    settingsTransportAutoPending: "Automatic / awaiting probe",
+    settingsModeDual: "v2 LAN + public",
+    settingsModeLanOnly: "v2 LAN only",
+    settingsModePublicOnly: "v2 public only",
+    settingsModeLegacy: "Legacy single address",
+    settingsModeUnconfigured: "Not configured",
+    settingsLegacyHint:
+      "Reassociate from Zettlab Memo, or enter a LAN address below, to enable automatic LAN/public selection.",
+    settingsConfigMode: "Configuration mode",
+    settingsCurrentTransport: "Current transport",
+    settingsLanAddress: "LAN address",
+    settingsLanAddressDescription:
+      "Only a private address shown by Memo is accepted. It is verified within 3 seconds before saving.",
+    settingsLanSave: "Verify and save",
+    settingsLanInvalid:
+      "The LAN address is invalid. Use the address shown by Memo.",
+    settingsLanPublicRequired:
+      "A public address is required before the LAN address can be cleared.",
+    settingsLanUnreachable:
+      "The LAN address is currently unreachable. The previous configuration was kept.",
+    settingsLanStale:
+      "The configuration changed during verification. The LAN edit was not saved.",
+    settingsLanCleared:
+      "LAN address cleared. Future syncs will continue over the public address.",
+    settingsLanSaved: "LAN address verified and saved.",
+    settingsLanSaveFailed: "Save failed. The previous configuration was kept.",
+    settingsPublicAddress: "Public address",
+    settingsPublicAddressDescription:
+      "Written by Zettlab Memo automatic setup. Read-only and available to copy.",
+    settingsNotConfigured: "Not configured",
+    settingsIgnoreNodeModules: "Ignore node_modules",
+    settingsIgnoreNodeModulesDescription:
+      "Ignore node_modules directories and their contents at every depth by default.",
     noReachableEndpoint: "Neither the LAN nor public WebDAV address is reachable",
     commandSyncNow: "Sync Zettlab Memo now",
     commandTestConnection: "Test Zettlab Memo service",
@@ -86,6 +145,34 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusSyncFailed: "同步失败",
     transportLan: "局域网",
     transportPublic: "公网",
+    settingsTransportManual: "手动地址",
+    settingsTransportAutoPending: "自动选择 / 待检测",
+    settingsModeDual: "v2 双地址",
+    settingsModeLanOnly: "v2 仅局域网",
+    settingsModePublicOnly: "v2 仅公网",
+    settingsModeLegacy: "旧版单地址",
+    settingsModeUnconfigured: "未配置",
+    settingsLegacyHint:
+      "请从 Zettlab Memo 重新关联，或在下方填写局域网地址，以启用局域网/公网自动选择。",
+    settingsConfigMode: "配置模式",
+    settingsCurrentTransport: "当前通道",
+    settingsLanAddress: "局域网地址",
+    settingsLanAddressDescription:
+      "仅接受 Memo 展示的私网地址；保存前会在 3 秒内完成验证。",
+    settingsLanSave: "验证并保存",
+    settingsLanInvalid: "局域网地址格式不正确，请使用 Memo 展示的地址。",
+    settingsLanPublicRequired: "没有可用的公网地址，不能清空局域网地址。",
+    settingsLanUnreachable: "局域网地址暂时无法连接，原配置未修改。",
+    settingsLanStale: "验证期间配置已变更，本次局域网编辑未保存。",
+    settingsLanCleared: "局域网地址已清空，后续同步继续使用公网。",
+    settingsLanSaved: "局域网地址已验证并保存。",
+    settingsLanSaveFailed: "保存失败，原配置未修改。",
+    settingsPublicAddress: "公网地址",
+    settingsPublicAddressDescription: "由 Memo 自动关联写入，只读且可复制。",
+    settingsNotConfigured: "未配置",
+    settingsIgnoreNodeModules: "忽略 node_modules",
+    settingsIgnoreNodeModulesDescription:
+      "默认忽略所有层级的 node_modules 目录及其内容。",
     noReachableEndpoint: "局域网和公网 WebDAV 地址均不可用",
     commandSyncNow: "立即同步 Zettlab Memo",
     commandTestConnection: "检测 Zettlab Memo 服务",
@@ -119,6 +206,34 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusSyncFailed: "同步失敗",
     transportLan: "區域網路",
     transportPublic: "公網",
+    settingsTransportManual: "手動位址",
+    settingsTransportAutoPending: "自動選擇 / 等待檢測",
+    settingsModeDual: "v2 雙位址",
+    settingsModeLanOnly: "v2 僅區域網路",
+    settingsModePublicOnly: "v2 僅公網",
+    settingsModeLegacy: "舊版單一位址",
+    settingsModeUnconfigured: "未設定",
+    settingsLegacyHint:
+      "請從 Zettlab Memo 重新關聯，或在下方填寫區域網路位址，以啟用區域網路/公網自動選擇。",
+    settingsConfigMode: "設定模式",
+    settingsCurrentTransport: "目前通道",
+    settingsLanAddress: "區域網路位址",
+    settingsLanAddressDescription:
+      "僅接受 Memo 顯示的私有網路位址；儲存前會在 3 秒內完成驗證。",
+    settingsLanSave: "驗證並儲存",
+    settingsLanInvalid: "區域網路位址格式不正確，請使用 Memo 顯示的位址。",
+    settingsLanPublicRequired: "沒有可用的公網位址，無法清除區域網路位址。",
+    settingsLanUnreachable: "區域網路位址目前無法連線，原設定未修改。",
+    settingsLanStale: "驗證期間設定已變更，本次區域網路編輯未儲存。",
+    settingsLanCleared: "區域網路位址已清除，後續同步將繼續使用公網。",
+    settingsLanSaved: "區域網路位址已驗證並儲存。",
+    settingsLanSaveFailed: "儲存失敗，原設定未修改。",
+    settingsPublicAddress: "公網位址",
+    settingsPublicAddressDescription: "由 Memo 自動關聯寫入，唯讀且可複製。",
+    settingsNotConfigured: "未設定",
+    settingsIgnoreNodeModules: "忽略 node_modules",
+    settingsIgnoreNodeModulesDescription:
+      "預設忽略所有層級的 node_modules 目錄及其內容。",
     noReachableEndpoint: "區域網路和公網 WebDAV 位址均無法使用",
     commandSyncNow: "立即同步 Zettlab Memo",
     commandTestConnection: "檢測 Zettlab Memo 服務",

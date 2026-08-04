@@ -12,26 +12,59 @@ class MemoryFs extends FakeFs {
   kind = "memory";
   private files = new Map<string, ArrayBuffer>();
   private mtimes = new Map<string, number>();
+  private folders = new Set<string>();
+
+  private addParentFolders(key: string): void {
+    const parts = key.replace(/\/$/, "").split("/");
+    for (let index = 1; index < parts.length; index += 1) {
+      this.folders.add(`${parts.slice(0, index).join("/")}/`);
+    }
+  }
 
   async walk(): Promise<Entity[]> {
-    return [...this.files.entries()].map(([key, content]) => ({
-      key,
-      keyRaw: key,
-      size: content.byteLength,
-      sizeRaw: content.byteLength,
-      mtimeCli: this.mtimes.get(key) ?? 1,
-      mtimeSvr: this.mtimes.get(key) ?? 1,
-    }));
+    return [
+      ...[...this.folders].map((key) => ({
+        key,
+        keyRaw: key,
+        size: 0,
+        sizeRaw: 0,
+      })),
+      ...[...this.files.entries()].map(([key, content]) => ({
+        key,
+        keyRaw: key,
+        size: content.byteLength,
+        sizeRaw: content.byteLength,
+        mtimeCli: this.mtimes.get(key) ?? 1,
+        mtimeSvr: this.mtimes.get(key) ?? 1,
+      })),
+    ];
   }
   async walkPartial(): Promise<Entity[]> { return this.walk(); }
   async stat(key: string): Promise<Entity> {
     const content = this.files.get(key);
-    if (content === undefined) throw new Error("missing file");
+    if (content === undefined) {
+      const folder = key.endsWith("/") ? key : `${key}/`;
+      if (!this.folders.has(folder)) throw new Error("missing file");
+      return { key: folder, keyRaw: folder, size: 0, sizeRaw: 0 };
+    }
     const mtime = this.mtimes.get(key) ?? 1;
-    return { key, keyRaw: key, size: content.byteLength, sizeRaw: content.byteLength, mtimeCli: mtime, mtimeSvr: mtime };
+    return {
+      key,
+      keyRaw: key,
+      size: content.byteLength,
+      sizeRaw: content.byteLength,
+      mtimeCli: mtime,
+      mtimeSvr: mtime,
+    };
   }
-  async mkdir(key: string): Promise<Entity> { return { key, keyRaw: key, size: 0, sizeRaw: 0 }; }
+  async mkdir(key: string): Promise<Entity> {
+    const folder = key.endsWith("/") ? key : `${key}/`;
+    this.addParentFolders(folder);
+    this.folders.add(folder);
+    return { key: folder, keyRaw: folder, size: 0, sizeRaw: 0 };
+  }
   async writeFile(key: string, content: ArrayBuffer, mtime = 1): Promise<Entity> {
+    this.addParentFolders(key);
     this.files.set(key, content);
     this.mtimes.set(key, mtime);
     return this.stat(key);
@@ -45,7 +78,25 @@ class MemoryFs extends FakeFs {
     this.files.delete(key1);
     this.mtimes.delete(key1);
   }
-  async rm(key: string): Promise<void> { this.files.delete(key); this.mtimes.delete(key); }
+  async rm(key: string): Promise<void> {
+    if (key.endsWith("/")) {
+      for (const file of [...this.files.keys()]) {
+        if (file.startsWith(key)) {
+          this.files.delete(file);
+          this.mtimes.delete(file);
+        }
+      }
+      for (const folder of [...this.folders]) {
+        if (folder.startsWith(key)) this.folders.delete(folder);
+      }
+    }
+    this.files.delete(key);
+    this.folders.delete(key.endsWith("/") ? key : `${key}/`);
+    this.mtimes.delete(key);
+  }
+  has(key: string): boolean {
+    return this.files.has(key);
+  }
   async checkConnect(): Promise<boolean> { return true; }
   async getUserDisplayName(): Promise<string> { return "memory"; }
   async revokeAuth(): Promise<void> {}
@@ -271,5 +322,132 @@ describe("plain remote sync boundary", () => {
     await runSync();
     assert.ok(syncError instanceof ProtectModifyError);
     assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "second");
+  });
+
+  it("ignores exact node_modules segments by default and allows them when disabled", async () => {
+    Object.assign(globalThis, {
+      window: {
+        moment: () => ({
+          format: () => "1970-01-01T00:00:00Z",
+          toISOString: () => "1970-01-01T00:00:00.000Z",
+        }),
+      },
+    });
+
+    const run = async (ignoreNodeModules: boolean): Promise<MemoryFs> => {
+      const local = new MemoryFs();
+      const remote = new MemoryFs();
+      await local.writeFile(
+        "skills/demo/node_modules/pkg/index.js",
+        new TextEncoder().encode("dependency").buffer,
+        1,
+        1
+      );
+      await local.writeFile(
+        "skills/demo/node_modules_backup/keep.js",
+        new TextEncoder().encode("keep").buffer,
+        1,
+        1
+      );
+      await local.writeFile(
+        "skills/demo/SKILL.md",
+        new TextEncoder().encode("skill").buffer,
+        1,
+        1
+      );
+      let syncError: Error | undefined;
+      await syncer(
+        local,
+        remote,
+        new PlainRemoteFs(remote),
+        undefined,
+        {
+          syncPlansTbl: new MemoryTable(),
+          prevSyncRecordsTbl: new MemoryTable(),
+        } as unknown as InternalDBs,
+        "manual",
+        "default",
+        `test-vault-${ignoreNodeModules}`,
+        ".obsidian",
+        normalizeSettings({ ignoreNodeModules }),
+        () => "safety limit reached",
+        () => undefined,
+        undefined,
+        async (_trigger, error) => {
+          syncError = error;
+        }
+      );
+      assert.equal(syncError, undefined);
+      return remote;
+    };
+
+    const ignored = await run(true);
+    assert.equal(ignored.has("skills/demo/node_modules/pkg/index.js"), false);
+    assert.equal(ignored.has("skills/demo/node_modules_backup/keep.js"), true);
+    assert.equal(ignored.has("skills/demo/SKILL.md"), true);
+
+    const included = await run(false);
+    assert.equal(included.has("skills/demo/node_modules/pkg/index.js"), true);
+  });
+
+  it("does not delete an existing remote node_modules tree when the toggle is enabled", async () => {
+    Object.assign(globalThis, {
+      window: {
+        moment: () => ({
+          format: () => "1970-01-01T00:00:00Z",
+          toISOString: () => "1970-01-01T00:00:00.000Z",
+        }),
+      },
+    });
+    const local = new MemoryFs();
+    const remote = new MemoryFs();
+    const previousRecords = new MemoryTable();
+    const database = {
+      syncPlansTbl: new MemoryTable(),
+      prevSyncRecordsTbl: previousRecords,
+    } as unknown as InternalDBs;
+    const dependencyPath = "skills/demo/node_modules/pkg/index.js";
+    await local.writeFile(
+      dependencyPath,
+      new TextEncoder().encode("dependency").buffer,
+      1,
+      1
+    );
+    const run = async (ignoreNodeModules: boolean): Promise<void> => {
+      let syncError: Error | undefined;
+      await syncer(
+        local,
+        remote,
+        new PlainRemoteFs(remote),
+        undefined,
+        database,
+        "manual",
+        "default",
+        "toggle-vault",
+        ".obsidian",
+        normalizeSettings({ ignoreNodeModules }),
+        () => "safety limit reached",
+        () => undefined,
+        undefined,
+        async (_trigger, error) => {
+          syncError = error;
+        }
+      );
+      assert.equal(syncError, undefined);
+    };
+
+    await run(false);
+    assert.equal(remote.has(dependencyPath), true);
+    assert.equal(
+      previousRecords.has(`toggle-vault\tdefault\t${dependencyPath}`),
+      true
+    );
+    await local.rm(dependencyPath);
+    await run(true);
+    assert.equal(remote.has(dependencyPath), true);
+    assert.equal(
+      previousRecords.has(`toggle-vault\tdefault\t${dependencyPath}`),
+      false
+    );
   });
 });
