@@ -17,10 +17,23 @@ export class ManualLanAttemptGuard {
     return ++this.revision;
   }
 
+  invalidate(): void {
+    this.revision += 1;
+  }
+
   isCurrent(revision: number): boolean {
     return revision === this.revision;
   }
 }
+
+export const shouldRollbackManualLanSave = (
+  currentSettings: RemotelySavePluginSettings,
+  attemptedSettings: RemotelySavePluginSettings,
+  currentRevision: number,
+  attemptedRevision: number | undefined
+): boolean =>
+  currentSettings === attemptedSettings &&
+  currentRevision === attemptedRevision;
 
 export type ManualLanUpdateFailure =
   | "invalid_lan"

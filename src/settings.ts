@@ -9,6 +9,7 @@ import type ZettlabSyncPlugin from "./main";
 import {
   ManualLanAttemptGuard,
   prepareManualLanUpdateIfCurrent,
+  shouldRollbackManualLanSave,
 } from "./manualLanSettings";
 import { obsidianDavProbeRequest } from "./obsidianDavProbe";
 import {
@@ -54,6 +55,7 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
   }
 
   display(): void {
+    this.manualLanAttempts.invalidate();
     const { containerEl } = this;
     const language = getLanguage();
     const localize = (key: MessageKey): string => t(key, {}, language);
@@ -318,16 +320,22 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
             );
           } catch (error) {
             console.error("Failed to save manual LAN address", error);
-            const stillCurrent =
-              this.manualLanAttempts.isCurrent(attemptRevision) &&
-              this.plugin.settings === result.settings &&
-              this.plugin.getSettingsRevision() === saveRevision;
-            if (stillCurrent) {
+            const ownsFailedSettings = shouldRollbackManualLanSave(
+              this.plugin.settings,
+              result.settings,
+              this.plugin.getSettingsRevision(),
+              saveRevision
+            );
+            if (ownsFailedSettings) {
               this.plugin.settings = previous;
             }
+            const attemptStillCurrent =
+              this.manualLanAttempts.isCurrent(attemptRevision);
             new Notice(
               localize(
-                stillCurrent ? "settingsLanSaveFailed" : "settingsLanStale"
+                attemptStillCurrent && ownsFailedSettings
+                  ? "settingsLanSaveFailed"
+                  : "settingsLanStale"
               )
             );
           } finally {

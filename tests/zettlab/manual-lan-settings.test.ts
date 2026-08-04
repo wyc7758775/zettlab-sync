@@ -6,6 +6,7 @@ import {
   ManualLanAttemptGuard,
   prepareManualLanUpdate,
   prepareManualLanUpdateIfCurrent,
+  shouldRollbackManualLanSave,
 } from "../../src/manualLanSettings";
 import { normalizeSettings } from "../../src/settingsModel";
 
@@ -163,5 +164,34 @@ describe("manual LAN settings", () => {
     const second = attempts.begin();
     assert.equal(attempts.isCurrent(first), false);
     assert.equal(attempts.isCurrent(second), true);
+  });
+
+  it("invalidates a pending probe when the settings UI is redrawn", () => {
+    const attempts = new ManualLanAttemptGuard();
+    const pending = attempts.begin();
+
+    attempts.invalidate();
+
+    assert.equal(attempts.isCurrent(pending), false);
+  });
+
+  it("owns a failed save independently from the current probe attempt", () => {
+    const previous = normalizeSettings({
+      webdav: { address: PUBLIC_ADDRESS, password: "strong-test-password" },
+    });
+    const attempted = normalizeSettings({
+      ...previous,
+      webdav: {
+        ...previous.webdav,
+        zettlabEndpoints: { lan: LAN_ADDRESS, public: PUBLIC_ADDRESS },
+      },
+    });
+
+    assert.equal(shouldRollbackManualLanSave(attempted, attempted, 4, 4), true);
+    assert.equal(shouldRollbackManualLanSave(previous, attempted, 4, 4), false);
+    assert.equal(
+      shouldRollbackManualLanSave(attempted, attempted, 5, 4),
+      false
+    );
   });
 });

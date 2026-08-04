@@ -3,8 +3,10 @@ import { describe, it } from "mocha";
 import { applyBootstrapPayload } from "../../src/bootstrap";
 import type { DavProbeRequest } from "../../src/davEndpoints";
 import {
+  ManualLanAttemptGuard,
   prepareManualLanUpdate,
   prepareManualLanUpdateIfCurrent,
+  shouldRollbackManualLanSave,
 } from "../../src/manualLanSettings";
 import { normalizeSettings } from "../../src/settingsModel";
 import { SettingsSaveQueue } from "../../src/settingsSaveQueue";
@@ -164,5 +166,49 @@ describe("manual LAN configuration flow", () => {
       public: publicAddress,
     });
     assert.equal(persisted.webdav.password, "new-test-password");
+  });
+
+  it("rolls back a failed old save after a newer probe fails validation", async () => {
+    const publicAddress = "https://memo.us-drive.zettlab.com/dav/";
+    const manualLan = "http://192.168.5.30:9091/dav/";
+    const original = normalizeSettings({
+      webdav: {
+        address: publicAddress,
+        password: "strong-test-password",
+      },
+    });
+    const manual = await prepareManualLanUpdate(
+      original,
+      manualLan,
+      reachableLan
+    );
+    assert.equal(manual.ok, true);
+    if (!manual.ok) return;
+
+    const attempts = new ManualLanAttemptGuard();
+    const oldAttempt = attempts.begin();
+    let currentSettings = manual.settings;
+    const saveRevision = 1;
+    const newerAttempt = attempts.begin();
+    const newerResult = await prepareManualLanUpdateIfCurrent(
+      currentSettings,
+      "not-a-lan-address",
+      reachableLan,
+      () => attempts.isCurrent(newerAttempt)
+    );
+
+    assert.equal(newerResult.ok, false);
+    assert.equal(attempts.isCurrent(oldAttempt), false);
+    assert.equal(
+      shouldRollbackManualLanSave(
+        currentSettings,
+        manual.settings,
+        saveRevision,
+        saveRevision
+      ),
+      true
+    );
+    currentSettings = original;
+    assert.equal(currentSettings, original);
   });
 });
