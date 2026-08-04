@@ -450,7 +450,6 @@ export const isSpecialFolderNameToSkip = (
     ".github",
     ".gitlab",
     ".svn",
-    "node_modules",
     ".DS_Store",
     "__MACOSX ",
     "Icon\r", // https://superuser.com/questions/298785/icon-file-on-os-x-desktop

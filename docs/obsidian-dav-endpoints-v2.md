@@ -25,7 +25,7 @@ At the start of every connection test or sync round, the plugin probes LAN first
 
 Managed LAN addresses are limited to RFC1918 IPv4 or IPv6 ULA on `http://<host>:9091/dav/`. Managed public addresses are limited to `https://*.zettlab.com:443/dav/`. User information, query parameters, fragments, loopback/public LAN hosts, and other ports are rejected.
 
-Editing the traditional WebDAV address clears managed endpoints and restores legacy single-address mode.
+The plugin settings page exposes the managed LAN address in Advanced options. Manual edits accept only the LAN format above and are verified before saving; the managed public address remains read-only. Clearing LAN keeps the public endpoint and switches future rounds to public-only. A legacy single-address configuration can be upgraded by entering a verified LAN address, without changing its public address.
 
 ## Hard Rules
 

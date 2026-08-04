@@ -9,6 +9,7 @@ import { Queue } from "@fyears/tsqueue";
 import chunk from "lodash/chunk";
 import flatten from "lodash/flatten";
 import { isSpecialFolderNameToSkip, statFix } from "./misc";
+import { shouldIgnoreNodeModulesPath } from "./pathFilters";
 
 const isPluginDirItself = (x: string, pluginId: string) => {
   return (
@@ -39,7 +40,8 @@ export const listFilesInObsFolder = async (
   configDir: string,
   vault: Vault,
   pluginId: string,
-  bookmarksOnly: boolean
+  bookmarksOnly: boolean,
+  ignoreNodeModules = true
 ): Promise<Entity[]> => {
   const q = new Queue([configDir]);
   const CHUNK_SIZE = 10;
@@ -78,15 +80,16 @@ export const listFilesInObsFolder = async (
           );
         }
 
+        const itself: Entity = {
+          key: isFolder ? `${x}/` : x, // local always unencrypted
+          keyRaw: isFolder ? `${x}/` : x,
+          mtimeCli: statRes.mtime,
+          mtimeSvr: statRes.mtime,
+          size: statRes.size, // local always unencrypted
+          sizeRaw: statRes.size,
+        };
         return {
-          itself: {
-            key: isFolder ? `${x}/` : x, // local always unencrypted
-            keyRaw: isFolder ? `${x}/` : x,
-            mtimeCli: statRes.mtime,
-            mtimeSvr: statRes.mtime,
-            size: statRes.size, // local always unencrypted
-            sizeRaw: statRes.size,
-          },
+          itself,
           children: children,
         };
       });
@@ -94,12 +97,17 @@ export const listFilesInObsFolder = async (
 
       for (const iter of r2) {
         contents.push(iter.itself);
-        const isInsideSelfPlugin = isPluginDirItself(iter.itself.key, pluginId);
+        const isInsideSelfPlugin = isPluginDirItself(
+          iter.itself.keyRaw,
+          pluginId
+        );
         if (iter.children !== undefined) {
           for (const iter2 of iter.children.folders) {
-            if (
-              isSpecialFolderNameToSkip(iter2, ["workspace", "workspace.json"])
-            ) {
+            if (shouldIgnoreNodeModulesPath(iter2, ignoreNodeModules)) {
+              iter.itself.preserveEmptyFolder = true;
+              continue;
+            }
+            if (isSpecialFolderNameToSkip(iter2, ["workspace", "workspace.json"])) {
               continue;
             }
             if (isInsideSelfPlugin && !isLikelyPluginSubFiles(iter2)) {
@@ -110,6 +118,7 @@ export const listFilesInObsFolder = async (
           }
           for (const iter2 of iter.children.files) {
             if (
+              shouldIgnoreNodeModulesPath(iter2, ignoreNodeModules) ||
               isSpecialFolderNameToSkip(iter2, ["workspace", "workspace.json"])
             ) {
               continue;

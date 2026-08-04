@@ -25,6 +25,7 @@ import {
 } from "./localdb";
 import { ZettlabSyncSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, normalizeSettings } from "./settingsModel";
+import { SettingsSaveQueue } from "./settingsSaveQueue";
 import { syncer } from "./sync";
 import { getSyncOverview, type SyncOverview } from "./syncOverview";
 import { SyncRunGate } from "./syncRunGate";
@@ -60,6 +61,7 @@ export default class ZettlabSyncPlugin extends Plugin {
   private lastSuccessfulSyncAt?: number;
   private lastFailedSyncAt?: number;
   private activeTransport?: ObsidianDavTransport;
+  private readonly settingsSaveQueue = new SettingsSaveQueue();
   private readonly syncRunGate = new SyncRunGate();
 
   async onload(): Promise<void> {
@@ -118,9 +120,17 @@ export default class ZettlabSyncPlugin extends Plugin {
     this.settings = normalizeSettings(persisted);
   }
 
-  async saveSettings(): Promise<void> {
-    await this.saveData(normalConfigToMessy(this.settings));
+  async saveSettings(): Promise<number> {
+    const persisted = normalConfigToMessy(this.settings);
+    const revision = await this.settingsSaveQueue.run(() =>
+      this.saveData(persisted)
+    );
     this.configureAutoSync();
+    return revision;
+  }
+
+  getSettingsRevision(): number {
+    return this.settingsSaveQueue.revision;
   }
 
   async bootstrapFromZettlabMemo(params: Record<string, string>): Promise<boolean> {
@@ -284,7 +294,8 @@ export default class ZettlabSyncPlugin extends Plugin {
       this.app.vault.configDir,
       this.manifest.id,
       undefined,
-      this.settings.deleteToWhere
+      this.settings.deleteToWhere,
+      this.settings.ignoreNodeModules ?? true
     );
     const remote = getClient(selectedSettings, this.app.vault.getName(), async () => {
       await this.saveSettings();

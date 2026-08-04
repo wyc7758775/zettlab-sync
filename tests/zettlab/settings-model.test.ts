@@ -25,6 +25,7 @@ describe("settings normalization", () => {
     assert.equal(normalized.webdav.username, "sync");
     assert.equal(normalized.webdav.authType, "basic");
     assert.deepEqual(normalized.ignorePaths, ["^tmp/"]);
+    assert.equal(normalized.ignoreNodeModules, true);
     assert.equal("s3" in (normalized as unknown as Record<string, unknown>), false);
   });
 
@@ -41,6 +42,20 @@ describe("settings normalization", () => {
     assert.equal(parseProtectModifyPercentage("0"), undefined);
     assert.equal(parseProtectModifyPercentage("50.5"), undefined);
     assert.equal(parseProtectModifyPercentage("101"), undefined);
+  });
+
+  it("defaults old settings to ignoring node_modules and preserves an explicit opt-out", () => {
+    assert.equal(normalizeSettings({}).ignoreNodeModules, true);
+    assert.equal(
+      normalizeSettings({ ignoreNodeModules: false }).ignoreNodeModules,
+      false
+    );
+    assert.equal(
+      normalizeSettings({
+        ignoreNodeModules: "false" as unknown as boolean,
+      }).ignoreNodeModules,
+      true
+    );
   });
 
   it("keeps valid managed endpoints and drops a malformed persisted set", () => {
