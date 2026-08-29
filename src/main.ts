@@ -12,6 +12,7 @@ import type {
 import { messyConfigToNormal, normalConfigToMessy } from "./configPersist";
 import { getClient } from "./fsGetter";
 import { selectDavEndpoint } from "./davEndpoints";
+import type { DavEndpointSelection } from "./davEndpoints";
 import { obsidianDavProbeRequest } from "./obsidianDavProbe";
 import { FakeFsLocal } from "./fsLocal";
 import { PlainRemoteFs } from "./fsPlain";
@@ -42,6 +43,11 @@ import {
   normalizeDirectBootstrapPayload,
   retryBootstrapConnection,
 } from "./bootstrap";
+import {
+  getVerifiedBootstrapEndpoint,
+  retryBootstrapFirstSync,
+  type SyncAttemptResult,
+} from "./bootstrapFirstSync";
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -207,10 +213,29 @@ export default class ZettlabSyncPlugin extends Plugin {
       await reportCompletion("ok", payload.protocolVersion);
       new Notice(localize("connectionSuccess"));
       // Connection is already proven and completion has been acknowledged.
-      // A transient first-sync failure must not discard valid credentials; the
-      // normal retry/manual sync paths can recover without making the user pair
-      // again.
-      await this.syncRun("auto_once_init");
+      // Reuse the verified endpoint once, then reselect LAN/public on bounded
+      // retries so a transient transport failure cannot create a false red
+      // state or force the user to run the command palette manually.
+      try {
+        const verifiedEndpoint = getVerifiedBootstrapEndpoint(
+          this.settings,
+          this.activeTransport
+        );
+        const firstSyncResult = await retryBootstrapFirstSync(
+          (reuseVerifiedEndpoint) =>
+            this.runBootstrapSyncAttempt(
+              reuseVerifiedEndpoint ? verifiedEndpoint : undefined
+            )
+        );
+        await this.publishSyncResult("auto_once_init", firstSyncResult);
+      } catch (error) {
+        // Association has already succeeded. A local sync-state persistence
+        // failure must not roll back valid DAV credentials or report the
+        // one-time bootstrap session as failed after it was acknowledged.
+        console.error("Zettlab bootstrap first sync failed", error);
+        this.setStatus(localize("statusSyncFailed"));
+        new Notice(localize("syncFailed", { reason: errorMessage(error) }));
+      }
       return true;
     } catch (error) {
       console.error("Zettlab bootstrap apply failed", error);
@@ -251,35 +276,53 @@ export default class ZettlabSyncPlugin extends Plugin {
 
   async syncRun(source: SyncTriggerSourceType): Promise<boolean> {
     if (this.isSyncing || !this.syncRunGate.tryAcquire()) {
-      if (source === "manual") new Notice(localize("syncInProgress"));
-      return false;
+      return this.publishSyncResult(source, { ok: false, kind: "busy" });
     }
     try {
-      return await this.syncRunAcquired(source);
+      let result: SyncAttemptResult;
+      try {
+        result = await this.syncRunAcquired(source);
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error(String(error));
+        console.error("Zettlab Sync failed", failure);
+        result = { ok: false, kind: "sync", error: failure };
+      }
+      return await this.publishSyncResult(source, result);
+    } finally {
+      this.syncRunGate.release();
+    }
+  }
+
+  private async runBootstrapSyncAttempt(
+    preferredEndpoint?: DavEndpointSelection
+  ): Promise<SyncAttemptResult> {
+    if (this.isSyncing || !this.syncRunGate.tryAcquire()) {
+      return { ok: false, kind: "busy" };
+    }
+    try {
+      return await this.syncRunAcquired("auto_once_init", preferredEndpoint);
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      console.error("Zettlab Sync failed", failure);
+      return { ok: false, kind: "sync", error: failure };
     } finally {
       this.syncRunGate.release();
     }
   }
 
   private async syncRunAcquired(
-    source: SyncTriggerSourceType
-  ): Promise<boolean> {
+    source: SyncTriggerSourceType,
+    preferredEndpoint?: DavEndpointSelection
+  ): Promise<SyncAttemptResult> {
     if (!this.isConfigured()) {
-      if (source === "manual") {
-        new Notice(localize("connectFirst"));
-      }
-      return false;
+      return { ok: false, kind: "not_configured" };
     }
 
-    const selected = await selectDavEndpoint(this.settings, obsidianDavProbeRequest);
+    const selected = preferredEndpoint
+      ?? await selectDavEndpoint(this.settings, obsidianDavProbeRequest);
     if (!selected) {
       this.activeTransport = undefined;
-      const failedAt = Date.now();
-      this.lastFailedSyncAt = failedAt;
-      await upsertLastFailedSyncTimeByVault(this.db, this.vaultRandomID, failedAt);
-      this.setStatus(localize("statusSyncFailed"));
-      new Notice(localize("syncFailed", { reason: localize("noReachableEndpoint") }));
-      return false;
+      return { ok: false, kind: "unreachable" };
     }
     this.activeTransport = selected.transport;
     const selectedSettings: RemotelySavePluginSettings = {
@@ -349,23 +392,19 @@ export default class ZettlabSyncPlugin extends Plugin {
       this.isSyncing = false;
       await plainRemote.closeResources();
     }
-    if (failed instanceof ProtectModifyError && source === "manual") {
-      this.setStatus(this.statusWithTransport(localize("statusReady")));
-      return false;
-    }
     if (failed !== undefined) {
-      this.lastFailedSyncAt = Date.now();
-      await upsertLastFailedSyncTimeByVault(
-        this.db,
-        this.vaultRandomID,
-        this.lastFailedSyncAt
-      );
-      this.setStatus(localize("statusSyncFailed"));
-      if (!(failed instanceof ProtectModifyError)) {
-        new Notice(localize("syncFailed", { reason: errorMessage(failed) }));
-      }
-      return false;
-    } else {
+      return failed instanceof ProtectModifyError
+        ? { ok: false, kind: "safety", error: failed }
+        : { ok: false, kind: "sync", error: failed };
+    }
+    return { ok: true };
+  }
+
+  private async publishSyncResult(
+    source: SyncTriggerSourceType,
+    result: SyncAttemptResult
+  ): Promise<boolean> {
+    if (result.ok) {
       this.lastSuccessfulSyncAt = Date.now();
       await upsertLastSuccessSyncTimeByVault(
         this.db,
@@ -375,6 +414,36 @@ export default class ZettlabSyncPlugin extends Plugin {
       if (source === "manual") new Notice(localize("syncCompleted"));
       return true;
     }
+
+    if (result.kind === "busy") {
+      if (source === "manual") new Notice(localize("syncInProgress"));
+      return false;
+    }
+    if (result.kind === "not_configured") {
+      if (source === "manual") new Notice(localize("connectFirst"));
+      return false;
+    }
+    if (
+      result.kind === "safety"
+      && (source === "manual" || source === "auto_once_init")
+    ) {
+      this.setStatus(this.statusWithTransport(localize("statusReady")));
+      return false;
+    }
+
+    this.lastFailedSyncAt = Date.now();
+    await upsertLastFailedSyncTimeByVault(
+      this.db,
+      this.vaultRandomID,
+      this.lastFailedSyncAt
+    );
+    this.setStatus(localize("statusSyncFailed"));
+    if (result.kind === "unreachable") {
+      new Notice(localize("syncFailed", { reason: localize("noReachableEndpoint") }));
+    } else if (result.kind === "sync" && result.error) {
+      new Notice(localize("syncFailed", { reason: errorMessage(result.error) }));
+    }
+    return false;
   }
 
   isConfigured(): boolean {
