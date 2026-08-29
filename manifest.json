@@ -1,7 +1,7 @@
 {
   "id": "zettlab-sync",
   "name": "Zettlab Sync",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "minAppVersion": "1.8.7",
   "description": "Sync your Markdown vault with Zettlab Memo over WebDAV.",
   "author": "Zettlab",
