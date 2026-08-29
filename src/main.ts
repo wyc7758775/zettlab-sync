@@ -45,7 +45,7 @@ import {
 } from "./bootstrap";
 import {
   getVerifiedBootstrapEndpoint,
-  retryBootstrapFirstSync,
+  runBootstrapFirstSyncExclusive,
   type SyncAttemptResult,
 } from "./bootstrapFirstSync";
 
@@ -221,13 +221,14 @@ export default class ZettlabSyncPlugin extends Plugin {
           this.settings,
           this.activeTransport
         );
-        const firstSyncResult = await retryBootstrapFirstSync(
+        await runBootstrapFirstSyncExclusive(
+          this.syncRunGate,
           (reuseVerifiedEndpoint) =>
-            this.runBootstrapSyncAttempt(
+            this.runBootstrapSyncAttemptAcquired(
               reuseVerifiedEndpoint ? verifiedEndpoint : undefined
-            )
+            ),
+          (result) => this.publishSyncResult("auto_once_init", result)
         );
-        await this.publishSyncResult("auto_once_init", firstSyncResult);
       } catch (error) {
         // Association has already succeeded. A local sync-state persistence
         // failure must not roll back valid DAV credentials or report the
@@ -293,20 +294,15 @@ export default class ZettlabSyncPlugin extends Plugin {
     }
   }
 
-  private async runBootstrapSyncAttempt(
+  private async runBootstrapSyncAttemptAcquired(
     preferredEndpoint?: DavEndpointSelection
   ): Promise<SyncAttemptResult> {
-    if (this.isSyncing || !this.syncRunGate.tryAcquire()) {
-      return { ok: false, kind: "busy" };
-    }
     try {
       return await this.syncRunAcquired("auto_once_init", preferredEndpoint);
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
       console.error("Zettlab Sync failed", failure);
       return { ok: false, kind: "sync", error: failure };
-    } finally {
-      this.syncRunGate.release();
     }
   }
 
@@ -345,6 +341,7 @@ export default class ZettlabSyncPlugin extends Plugin {
     });
     const plainRemote = new PlainRemoteFs(remote);
     let failed: Error | undefined;
+    let writePhaseStarted = false;
     try {
       await syncer(
         local,
@@ -379,7 +376,9 @@ export default class ZettlabSyncPlugin extends Plugin {
           }
         },
         undefined,
-        undefined,
+        (_trigger, step) => {
+          if (step === 7) writePhaseStarted = true;
+        },
         undefined,
         shouldOfferSafetyOverride(source)
           ? (details) => confirmProtectedChanges(this.app, details, localize)
@@ -395,7 +394,11 @@ export default class ZettlabSyncPlugin extends Plugin {
     if (failed !== undefined) {
       return failed instanceof ProtectModifyError
         ? { ok: false, kind: "safety", error: failed }
-        : { ok: false, kind: "sync", error: failed };
+        : {
+            ok: false,
+            kind: writePhaseStarted ? "sync" : "preflight",
+            error: failed,
+          };
     }
     return { ok: true };
   }
@@ -440,7 +443,10 @@ export default class ZettlabSyncPlugin extends Plugin {
     this.setStatus(localize("statusSyncFailed"));
     if (result.kind === "unreachable") {
       new Notice(localize("syncFailed", { reason: localize("noReachableEndpoint") }));
-    } else if (result.kind === "sync" && result.error) {
+    } else if (
+      (result.kind === "preflight" || result.kind === "sync") &&
+      result.error
+    ) {
       new Notice(localize("syncFailed", { reason: errorMessage(result.error) }));
     }
     return false;

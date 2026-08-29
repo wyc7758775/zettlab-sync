@@ -3,11 +3,13 @@ import type {
   RemotelySavePluginSettings,
 } from "./baseTypes";
 import type { DavEndpointSelection } from "./davEndpoints";
+import type { SyncRunGate } from "./syncRunGate";
 
 export type SyncAttemptFailureKind =
   | "busy"
   | "not_configured"
   | "unreachable"
+  | "preflight"
   | "safety"
   | "sync";
 
@@ -35,7 +37,7 @@ export const getVerifiedBootstrapEndpoint = (
 };
 
 const isRetryable = (result: SyncAttemptResult): boolean =>
-  !result.ok && ["busy", "unreachable", "sync"].includes(result.kind);
+  !result.ok && ["busy", "unreachable", "preflight"].includes(result.kind);
 
 export const retryBootstrapFirstSync = async (
   attempt: (reuseVerifiedEndpoint: boolean) => Promise<SyncAttemptResult>,
@@ -49,4 +51,21 @@ export const retryBootstrapFirstSync = async (
     if (result.ok || !isRetryable(result)) return result;
   }
   return result;
+};
+
+export const runBootstrapFirstSyncExclusive = async (
+  gate: Pick<SyncRunGate, "tryAcquire" | "release">,
+  attempt: (reuseVerifiedEndpoint: boolean) => Promise<SyncAttemptResult>,
+  publish: (result: SyncAttemptResult) => Promise<boolean>,
+  wait?: (milliseconds: number) => Promise<void>
+): Promise<boolean> => {
+  if (!gate.tryAcquire()) {
+    return publish({ ok: false, kind: "busy" });
+  }
+  try {
+    const result = await retryBootstrapFirstSync(attempt, wait);
+    return await publish(result);
+  } finally {
+    gate.release();
+  }
 };
