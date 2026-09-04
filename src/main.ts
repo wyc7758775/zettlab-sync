@@ -200,18 +200,19 @@ export default class ZettlabSyncPlugin extends Plugin {
       new Notice(localize("bootstrapInvalid"));
       return false;
     }
-    if (this.hasRemotelySaveConflict()) {
-      if (!(await disableRemotelySave(this.app))) {
-        await reportCompletion("failed", payload.protocolVersion);
-        new Notice(localize("remotelySaveConflict"));
-        return false;
-      }
-      new Notice(localize("remotelySaveDisabled"));
-    }
     const previous = this.settings;
+    const hadRemotelySaveConflict = this.hasRemotelySaveConflict();
+    let conflictDisableFailed = false;
     this.settings = applyBootstrapPayload(previous, payload);
     try {
       await this.saveSettings();
+      if (hadRemotelySaveConflict) {
+        if (!(await disableRemotelySave(this.app))) {
+          conflictDisableFailed = true;
+          throw new Error(localize("remotelySaveConflict"));
+        }
+        new Notice(localize("remotelySaveDisabled"));
+      }
       const connected = await retryBootstrapConnection(() => this.testConnection(false));
       if (!connected) {
         // The v2 payload and credentials are already durably applied. A
@@ -229,7 +230,9 @@ export default class ZettlabSyncPlugin extends Plugin {
       await this.saveSettings();
       this.setIdleStatus();
       await reportCompletion("failed", payload.protocolVersion);
-      new Notice(localize("bootstrapRolledBack"));
+      new Notice(
+        localize(conflictDisableFailed ? "remotelySaveConflict" : "bootstrapRolledBack")
+      );
       return false;
     }
     // Connection is already proven and completion has been acknowledged.
