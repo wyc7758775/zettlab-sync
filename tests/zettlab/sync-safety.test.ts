@@ -3,6 +3,7 @@ import { describe, it } from "mocha";
 import type { MixedEntity } from "../../src/baseTypes";
 import {
   buildProtectModifyDetails,
+  detectEmptySideDeletionRisk,
   getProtectedChangeAction,
   shouldOfferSafetyOverride,
 } from "../../src/syncSafety";
@@ -64,5 +65,53 @@ describe("sync safety preview", () => {
     assert.equal(shouldOfferSafetyOverride("auto_once_init"), false);
     assert.equal(shouldOfferSafetyOverride("auto_sync_on_save"), false);
     assert.equal(shouldOfferSafetyOverride("dry"), false);
+  });
+
+  it("detects a fully emptied remote side from tracked files", () => {
+    const previous = { keyRaw: "note.md", sizeRaw: 1 };
+    const mappings: Record<string, MixedEntity> = {
+      "a.md": {
+        key: "a.md",
+        prevSync: previous,
+        local: previous,
+        decision: "remote_is_deleted_thus_also_delete_local",
+      },
+      "b.md": {
+        key: "b.md",
+        prevSync: previous,
+        local: previous,
+        decision: "remote_is_deleted_thus_also_delete_local",
+      },
+    };
+    assert.deepEqual(detectEmptySideDeletionRisk(mappings), {
+      side: "remote",
+      affected: 2,
+      tracked: 2,
+    });
+  });
+
+  it("does not flag an empty remote on a first sync", () => {
+    const mappings: Record<string, MixedEntity> = {
+      "new.md": {
+        key: "new.md",
+        local: { keyRaw: "new.md", sizeRaw: 1 },
+        decision: "local_is_created_then_push",
+      },
+    };
+    assert.equal(detectEmptySideDeletionRisk(mappings), undefined);
+  });
+
+  it("does not block an intentional one-way push into an empty remote", () => {
+    const mappings: Record<string, MixedEntity> = {
+      "a.md": {
+        key: "a.md",
+        prevSync: { keyRaw: "a.md", sizeRaw: 1 },
+        local: { keyRaw: "a.md", sizeRaw: 1 },
+      },
+    };
+    assert.equal(
+      detectEmptySideDeletionRisk(mappings, "incremental_push_only"),
+      undefined
+    );
   });
 });

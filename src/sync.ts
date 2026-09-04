@@ -41,8 +41,11 @@ import {
   shouldIgnoreNodeModulesPath,
 } from "./pathFilters";
 import {
+  EmptySideProtectionError,
   ProtectModifyError,
+  buildEmptySideProtectionDetails,
   buildProtectModifyDetails,
+  detectEmptySideDeletionRisk,
   type ProtectModifyDetails,
 } from "./syncSafety";
 
@@ -210,42 +213,36 @@ const ensembleMixedEnties = async (
   profiler?.insert("ensembleMixedEnties: finish remote");
   profiler?.insertSize("sizeof finalMappings", finalMappings);
 
-  if (Object.keys(finalMappings).length === 0 || localEntityList.length === 0) {
-    // Special checking:
-    // if one side is totally empty,
-    // usually that's a hard rest.
-    // So we need to ignore everything of prevSyncEntityList to avoid deletions!
-    // TODO: acutally erase everything of prevSyncEntityList?
-    // TODO: local should also go through a isSkipItemByName checking beforehand
-  } else {
-    // normally go through the prevSyncEntityList
-    for (const prevSync of prevSyncEntityList) {
-      const key = prevSync.key!;
-      if (
-        isSkipItemByName(
-          key,
-          syncConfigDir,
-          syncUnderscoreItems,
-          configDir,
-          ignorePaths,
-          ignoreNodeModules
-        )
-      ) {
-        continue;
-      }
+  // Keep prior entries even when one side is empty. The safety gate below
+  // needs the history to distinguish an intentional first sync from a vault
+  // that suddenly disappeared; every non-dry run stops before this can become
+  // a deletion plan.
+  for (const prevSync of prevSyncEntityList) {
+    const key = prevSync.key!;
+    if (
+      isSkipItemByName(
+        key,
+        syncConfigDir,
+        syncUnderscoreItems,
+        configDir,
+        ignorePaths,
+        ignoreNodeModules
+      )
+    ) {
+      continue;
+    }
 
-      // TODO: abstraction leaking?
-      const prevSyncCopied = await fsEncrypt.encryptEntity(
-        copyEntityAndFixTimeFormat(prevSync, serviceType)
-      );
-      if (Object.prototype.hasOwnProperty.call(finalMappings, key)) {
-        finalMappings[key].prevSync = prevSyncCopied;
-      } else {
-        finalMappings[key] = {
-          key: key,
-          prevSync: prevSyncCopied,
-        };
-      }
+    // TODO: abstraction leaking?
+    const prevSyncCopied = await fsEncrypt.encryptEntity(
+      copyEntityAndFixTimeFormat(prevSync, serviceType)
+    );
+    if (Object.prototype.hasOwnProperty.call(finalMappings, key)) {
+      finalMappings[key].prevSync = prevSyncCopied;
+    } else {
+      finalMappings[key] = {
+        key: key,
+        prevSync: prevSyncCopied,
+      };
     }
   }
 
@@ -1234,7 +1231,9 @@ export const doActualSync = async (
   callbackSyncProcess?: any,
   confirmProtectedChangesFunc?: (
     details: ProtectModifyDetails
-  ) => Promise<boolean>
+  ) => Promise<boolean>,
+  triggerSource: SyncTriggerSourceType = "manual",
+  syncDirection: SyncDirectionType = "bidirectional"
 ) => {
   profiler?.addIndent();
   profiler?.insert("doActualSync: enter");
@@ -1263,21 +1262,26 @@ export const doActualSync = async (
   );
   profiler?.insertSize("doActualSync: sizeof realTotalCount", deletionOps);
 
+  const emptySideRisk = detectEmptySideDeletionRisk(
+    mixedEntityMappings,
+    syncDirection
+  );
+  if (emptySideRisk !== undefined && triggerSource !== "dry") {
+    const details = buildEmptySideProtectionDetails(emptySideRisk);
+    profiler?.insert("doActualSync: empty-side safety stop");
+    profiler?.removeIndent();
+    throw new EmptySideProtectionError(
+      `empty ${emptySideRisk.side} side would delete ${emptySideRisk.affected} tracked files`,
+      details
+    );
+  }
+
   if (
     protectModifyPercentage >= 0 &&
     realModifyDeleteCount >= 0 &&
     allFilesCount > 0
   ) {
-    if (
-      protectModifyPercentage === 100 &&
-      realModifyDeleteCount === allFilesCount
-    ) {
-      // special treatment for 100%
-      // let it pass, we do nothing here
-    } else if (
-      realModifyDeleteCount * 100 >=
-      allFilesCount * protectModifyPercentage
-    ) {
+    if (realModifyDeleteCount * 100 >= allFilesCount * protectModifyPercentage) {
       const errorStr: string = getProtectModifyPercentageErrorStrFunc(
         protectModifyPercentage,
         realModifyDeleteCount,
@@ -1531,6 +1535,17 @@ export async function syncer(
     );
     profiler?.insert(`finish step${step} (build partial mixedEntity)`);
 
+    const emptySideRisk = detectEmptySideDeletionRisk(
+      mixedEntityMappings,
+      settings.syncDirection ?? "bidirectional"
+    );
+    if (emptySideRisk !== undefined && triggerSource !== "dry") {
+      throw new EmptySideProtectionError(
+        `empty ${emptySideRisk.side} side detected before automatic sync`,
+        buildEmptySideProtectionDetails(emptySideRisk)
+      );
+    }
+
     mixedEntityMappings = await getSyncPlanInplace(
       mixedEntityMappings,
       settings.howToCleanEmptyFolder ?? "clean_both",
@@ -1572,7 +1587,9 @@ export async function syncer(
         db,
         profiler,
         callbackSyncProcess,
-        confirmProtectedChangesFunc
+        confirmProtectedChangesFunc,
+        triggerSource,
+        settings.syncDirection ?? "bidirectional"
       );
       profiler?.insert(`finish step${step} (actual sync)`);
     } else {

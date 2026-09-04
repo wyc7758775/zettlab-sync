@@ -6,7 +6,11 @@ import { PlainRemoteFs } from "../../src/fsPlain";
 import type { InternalDBs } from "../../src/localdb";
 import { normalizeSettings } from "../../src/settingsModel";
 import { syncer } from "../../src/sync";
-import { ProtectModifyError, type ProtectModifyDetails } from "../../src/syncSafety";
+import {
+  EmptySideProtectionError,
+  ProtectModifyError,
+  type ProtectModifyDetails,
+} from "../../src/syncSafety";
 
 class MemoryFs extends FakeFs {
   kind = "memory";
@@ -93,6 +97,10 @@ class MemoryFs extends FakeFs {
     this.files.delete(key);
     this.folders.delete(key.endsWith("/") ? key : `${key}/`);
     this.mtimes.delete(key);
+  }
+  clearFiles(): void {
+    this.files.clear();
+    this.mtimes.clear();
   }
   has(key: string): boolean {
     return this.files.has(key);
@@ -322,6 +330,112 @@ describe("plain remote sync boundary", () => {
     await runSync();
     assert.ok(syncError instanceof ProtectModifyError);
     assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "second");
+  });
+
+  it("blocks an automatic sync when the remote side suddenly becomes empty", async () => {
+    Object.assign(globalThis, {
+      window: {
+        moment: () => ({
+          format: () => "1970-01-01T00:00:00Z",
+          toISOString: () => "1970-01-01T00:00:00.000Z",
+        }),
+      },
+    });
+    const local = new MemoryFs();
+    const remote = new MemoryFs();
+    const database = {
+      syncPlansTbl: new MemoryTable(),
+      prevSyncRecordsTbl: new MemoryTable(),
+    } as unknown as InternalDBs;
+    const content = new TextEncoder().encode("keep").buffer;
+    await local.writeFile("one.md", content, 1, 1);
+    await local.writeFile("two.md", content, 1, 1);
+
+    const run = async (source: "manual" | "auto") => {
+      let syncError: Error | undefined;
+      await syncer(
+        local,
+        remote,
+        new PlainRemoteFs(remote),
+        undefined,
+        database,
+        source,
+        "default",
+        "test-vault-empty-side",
+        ".obsidian",
+        normalizeSettings({ protectModifyPercentage: 100 }),
+        () => "safety limit reached",
+        () => undefined,
+        undefined,
+        async (_trigger, error) => {
+          syncError = error;
+        }
+      );
+      return syncError;
+    };
+
+    assert.equal(await run("manual"), undefined);
+    remote.clearFiles();
+    const manualError = await run("manual");
+    assert.ok(manualError instanceof EmptySideProtectionError);
+    assert.equal(local.has("one.md"), true);
+    assert.equal(local.has("two.md"), true);
+    const error = await run("auto");
+    assert.ok(error instanceof EmptySideProtectionError);
+    assert.equal(local.has("one.md"), true);
+    assert.equal(local.has("two.md"), true);
+  });
+
+  it("does not let a 100 percent threshold bypass a full modification plan", async () => {
+    Object.assign(globalThis, {
+      window: {
+        moment: () => ({
+          format: () => "1970-01-01T00:00:00Z",
+          toISOString: () => "1970-01-01T00:00:00.000Z",
+        }),
+      },
+    });
+    const local = new MemoryFs();
+    const remote = new MemoryFs();
+    const database = {
+      syncPlansTbl: new MemoryTable(),
+      prevSyncRecordsTbl: new MemoryTable(),
+    } as unknown as InternalDBs;
+    const first = new TextEncoder().encode("first").buffer;
+    const second = new TextEncoder().encode("second").buffer;
+    await local.writeFile("one.md", first, 1, 1);
+    await local.writeFile("two.md", first, 1, 1);
+
+    const run = async (): Promise<Error | undefined> => {
+      let syncError: Error | undefined;
+      await syncer(
+        local,
+        remote,
+        new PlainRemoteFs(remote),
+        undefined,
+        database,
+        "manual",
+        "default",
+        "test-vault-100-threshold",
+        ".obsidian",
+        normalizeSettings({ protectModifyPercentage: 100 }),
+        () => "safety limit reached",
+        () => undefined,
+        undefined,
+        async (_trigger, error) => {
+          syncError = error;
+        }
+      );
+      return syncError;
+    };
+
+    assert.equal(await run(), undefined);
+    await local.writeFile("one.md", second, 2, 1);
+    await local.writeFile("two.md", second, 2, 1);
+    const error = await run();
+    assert.ok(error instanceof ProtectModifyError);
+    assert.equal(new TextDecoder().decode(await remote.readFile("one.md")), "first");
+    assert.equal(new TextDecoder().decode(await remote.readFile("two.md")), "first");
   });
 
   it("ignores exact node_modules segments by default and allows them when disabled", async () => {
