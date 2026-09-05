@@ -1,6 +1,6 @@
 {
   "name": "zettlab-sync",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "WebDAV sync between Obsidian and Zettlab Memo.",
   "scripts": {
     "dev": "node esbuild.config.mjs --watch",
@@ -29,8 +29,7 @@
     "rimraf": "^6.0.1",
     "tslib": "^2.6.3",
     "tsx": "^4.16.2",
-    "typescript": "^5.5.4",
-    "webdav-server": "^2.6.2"
+    "typescript": "^5.5.4"
   },
   "dependencies": {
     "@fyears/tsqueue": "^1.0.1",
