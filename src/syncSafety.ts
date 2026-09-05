@@ -1,6 +1,7 @@
 import type {
   DecisionTypeForMixedEntity,
   MixedEntity,
+  SyncDirectionType,
   SyncTriggerSourceType,
 } from "./baseTypes";
 
@@ -23,6 +24,8 @@ export interface ProtectModifyDetails {
   items: ProtectedChangePreviewItem[];
   hiddenItemCount: number;
   actionCounts: Record<ProtectedChangeAction, number>;
+  /** A side unexpectedly became empty and would otherwise cause a wipe. */
+  reason?: "empty_local" | "empty_remote";
 }
 
 export const MAX_PROTECTED_CHANGE_PREVIEW_ITEMS = 100;
@@ -84,6 +87,67 @@ export const buildProtectModifyDetails = (
   };
 };
 
+export interface EmptySideDeletionRisk {
+  side: "local" | "remote";
+  affected: number;
+  tracked: number;
+}
+
+export const buildEmptySideProtectionDetails = (
+  risk: EmptySideDeletionRisk
+): ProtectModifyDetails => ({
+  threshold: 100,
+  changed: risk.affected,
+  total: risk.tracked,
+  items: [],
+  hiddenItemCount: risk.affected,
+  actionCounts: {
+    upload: 0,
+    download: 0,
+    delete_local: risk.side === "remote" ? risk.affected : 0,
+    delete_remote: risk.side === "local" ? risk.affected : 0,
+    conflict: 0,
+  },
+  reason: risk.side === "remote" ? "empty_remote" : "empty_local",
+});
+
+/** Detect a full-side disappearance from a previously synchronised vault. */
+export const detectEmptySideDeletionRisk = (
+  mixedEntityMappings: Record<string, MixedEntity>,
+  syncDirection: SyncDirectionType = "bidirectional"
+): EmptySideDeletionRisk | undefined => {
+  const fileEntries = Object.values(mixedEntityMappings).filter(
+    (entry) => !entry.key.endsWith("/")
+  );
+  const tracked = fileEntries.filter((entry) => entry.prevSync !== undefined);
+  if (tracked.length === 0) return undefined;
+
+  const localTracked = tracked.filter((entry) => entry.local !== undefined).length;
+  const remoteTracked = tracked.filter((entry) => entry.remote !== undefined).length;
+  const missingRemoteTracked = tracked.filter(
+    (entry) => entry.remote === undefined
+  ).length;
+  const missingLocalTracked = tracked.filter(
+    (entry) => entry.local === undefined
+  ).length;
+
+  if (
+    missingRemoteTracked === tracked.length &&
+    localTracked > 0 &&
+    syncDirection !== "incremental_push_only"
+  ) {
+    return { side: "remote", affected: tracked.length, tracked: tracked.length };
+  }
+  if (
+    missingLocalTracked === tracked.length &&
+    remoteTracked > 0 &&
+    syncDirection !== "incremental_pull_only"
+  ) {
+    return { side: "local", affected: tracked.length, tracked: tracked.length };
+  }
+  return undefined;
+};
+
 export class ProtectModifyError extends Error {
   constructor(
     message: string,
@@ -91,5 +155,12 @@ export class ProtectModifyError extends Error {
   ) {
     super(message);
     this.name = "ProtectModifyError";
+  }
+}
+
+export class EmptySideProtectionError extends ProtectModifyError {
+  constructor(message: string, details: ProtectModifyDetails) {
+    super(message, details);
+    this.name = "EmptySideProtectionError";
   }
 }

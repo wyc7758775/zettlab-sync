@@ -16,7 +16,10 @@ import { unixTimeToStr } from "./misc";
 
 const DB_VERSION_NUMBER_IN_HISTORY = [20211114, 20220108, 20220326, 20240220];
 export const DEFAULT_DB_VERSION_NUMBER: number = 20240220;
-export const DEFAULT_DB_NAME = "remotelysavedb";
+// Keep Zettlab Sync isolated from Remotely Save. Both plugins are commonly
+// installed in one vault, and sharing the historical IndexedDB name lets one
+// plugin read or migrate the other's records.
+export const DEFAULT_DB_NAME = "zettlabsyncdb";
 export const DEFAULT_TBL_VERSION = "schemaversion";
 export const DEFAULT_SYNC_PLANS_HISTORY = "syncplanshistory";
 export const DEFAULT_TBL_VAULT_RANDOM_ID_MAPPING = "vaultrandomidmapping";

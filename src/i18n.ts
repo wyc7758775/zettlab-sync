@@ -49,6 +49,11 @@ export type MessageKey =
   | "ribbonSync"
   | "bootstrapInvalid"
   | "bootstrapRolledBack"
+  | "bootstrapSavedOffline"
+  | "statusSyncBlocked"
+  | "remotelySaveConflict"
+  | "remotelySaveDisabled"
+  | "emptySideStoppedReason"
   | "safetyStoppedReason"
   | "safetyTitle"
   | "safetySummary"
@@ -118,6 +123,12 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ribbonSync: "Sync Zettlab Memo",
     bootstrapInvalid: "This Zettlab Memo connection request is invalid or expired. Return to Zettlab Memo and retry.",
     bootstrapRolledBack: "Automatic setup failed. Your previous Obsidian settings were restored.",
+    bootstrapSavedOffline: "Obsidian settings were updated. The service is temporarily unreachable; sync will retry later.",
+    statusSyncBlocked: "Sync blocked",
+    remotelySaveConflict: "Remotely Save is enabled. Disable it before using Zettlab Sync.",
+    remotelySaveDisabled: "Remotely Save was disabled to prevent concurrent vault changes.",
+    emptySideStoppedReason:
+      "One side of the vault became empty; deletion was blocked. Restore the missing side before syncing again; deliberate clearing requires an explicit reset flow.",
     safetyStoppedReason: "{{changed}} of {{total}} files reached the {{threshold}}% safety limit",
     safetyTitle: "Review sync changes",
     safetySummary: "{{changed}} of {{total}} files would change, reaching the {{threshold}}% safety limit.",
@@ -179,6 +190,12 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ribbonSync: "同步 Zettlab Memo",
     bootstrapInvalid: "Zettlab Memo 关联请求无效或已过期，请返回 Zettlab Memo 重试。",
     bootstrapRolledBack: "自动配置失败，已恢复原来的 Obsidian 设置。",
+    bootstrapSavedOffline: "Obsidian 配置已更新，但服务暂时无法连接，后续同步会自动重试。",
+    statusSyncBlocked: "同步已阻止",
+    remotelySaveConflict: "检测到 Remotely Save 已启用，请先停用它，再使用 Zettlab Sync。",
+    remotelySaveDisabled: "已停用 Remotely Save，避免多个同步插件同时修改仓库。",
+    emptySideStoppedReason:
+      "检测到一端文件突然为空，已阻止删除。请先恢复缺失的一端再同步；如需故意清空整库，应使用明确的重置流程。",
     safetyStoppedReason: "{{changed}}/{{total}} 个文件达到 {{threshold}}% 安全阈值",
     safetyTitle: "确认本次同步变更",
     safetySummary: "预计变更 {{changed}}/{{total}} 个文件，已达到 {{threshold}}% 安全阈值。",
@@ -240,6 +257,12 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ribbonSync: "同步 Zettlab Memo",
     bootstrapInvalid: "Zettlab Memo 關聯請求無效或已過期，請返回 Zettlab Memo 重試。",
     bootstrapRolledBack: "自動設定失敗，已還原原本的 Obsidian 設定。",
+    bootstrapSavedOffline: "Obsidian 設定已更新，但服務暫時無法連線，後續同步會自動重試。",
+    statusSyncBlocked: "同步已阻止",
+    remotelySaveConflict: "偵測到 Remotely Save 已啟用，請先停用它，再使用 Zettlab Sync。",
+    remotelySaveDisabled: "已停用 Remotely Save，避免多個同步插件同時修改資料庫。",
+    emptySideStoppedReason:
+      "偵測到一端檔案突然為空，已阻止刪除。請先恢復缺失的一端再同步；如需故意清空整庫，應使用明確的重設流程。",
     safetyStoppedReason: "{{changed}}/{{total}} 個檔案達到 {{threshold}}% 安全門檻",
     safetyTitle: "確認本次同步變更",
     safetySummary: "預計變更 {{changed}}/{{total}} 個檔案，已達到 {{threshold}}% 安全門檻。",

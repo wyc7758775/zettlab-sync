@@ -31,10 +31,15 @@ import { syncer } from "./sync";
 import { getSyncOverview, type SyncOverview } from "./syncOverview";
 import { SyncRunGate } from "./syncRunGate";
 import {
+  EmptySideProtectionError,
   ProtectModifyError,
   shouldOfferSafetyOverride,
 } from "./syncSafety";
 import { confirmProtectedChanges } from "./syncSafetyModal";
+import {
+  disableRemotelySave,
+  isRemotelySaveEnabled,
+} from "./pluginConflicts";
 import {
   applyBootstrapPayload,
   buildBootstrapClaimRequest,
@@ -114,6 +119,9 @@ export default class ZettlabSyncPlugin extends Plugin {
       })
     );
     this.configureAutoSync();
+    if (this.hasRemotelySaveConflict()) {
+      new Notice(localize("remotelySaveConflict"));
+    }
   }
 
   onunload(): void {
@@ -199,16 +207,26 @@ export default class ZettlabSyncPlugin extends Plugin {
       return false;
     }
     const previous = this.settings;
+    const hadRemotelySaveConflict = this.hasRemotelySaveConflict();
+    let conflictDisableFailed = false;
     this.settings = applyBootstrapPayload(previous, payload);
     try {
       await this.saveSettings();
-      if (!(await retryBootstrapConnection(() => this.testConnection(false)))) {
-        this.settings = previous;
-        await this.saveSettings();
-        this.setIdleStatus();
-        await reportCompletion("failed", payload.protocolVersion);
-        new Notice(localize("bootstrapRolledBack"));
-        return false;
+      if (hadRemotelySaveConflict) {
+        if (!(await disableRemotelySave(this.app))) {
+          conflictDisableFailed = true;
+          throw new Error(localize("remotelySaveConflict"));
+        }
+        new Notice(localize("remotelySaveDisabled"));
+      }
+      const connected = await retryBootstrapConnection(() => this.testConnection(false));
+      if (!connected) {
+        // The v2 payload and credentials are already durably applied. A
+        // temporary LAN/public outage must not erase the fresh LAN override;
+        // endpoint selection will retry on the next sync run.
+        await reportCompletion("ok", payload.protocolVersion);
+        new Notice(localize("bootstrapSavedOffline"));
+        return true;
       }
       await reportCompletion("ok", payload.protocolVersion);
       new Notice(localize("connectionSuccess"));
@@ -244,7 +262,9 @@ export default class ZettlabSyncPlugin extends Plugin {
       await this.saveSettings();
       this.setIdleStatus();
       await reportCompletion("failed", payload.protocolVersion);
-      new Notice(localize("bootstrapRolledBack"));
+      new Notice(
+        localize(conflictDisableFailed ? "remotelySaveConflict" : "bootstrapRolledBack")
+      );
       return false;
     }
   }
@@ -276,6 +296,11 @@ export default class ZettlabSyncPlugin extends Plugin {
   }
 
   async syncRun(source: SyncTriggerSourceType): Promise<boolean> {
+    if (this.hasRemotelySaveConflict()) {
+      if (source === "manual") new Notice(localize("remotelySaveConflict"));
+      this.setStatus(localize("statusSyncBlocked"));
+      return false;
+    }
     if (this.isSyncing || !this.syncRunGate.tryAcquire()) {
       return this.publishSyncResult(source, { ok: false, kind: "busy" });
     }
@@ -431,6 +456,13 @@ export default class ZettlabSyncPlugin extends Plugin {
       && (source === "manual" || source === "auto_once_init")
     ) {
       this.setStatus(this.statusWithTransport(localize("statusReady")));
+      if (result.error instanceof EmptySideProtectionError) {
+        new Notice(
+          localize("syncFailed", {
+            reason: localize("emptySideStoppedReason"),
+          })
+        );
+      }
       return false;
     }
 
@@ -448,6 +480,15 @@ export default class ZettlabSyncPlugin extends Plugin {
       result.error
     ) {
       new Notice(localize("syncFailed", { reason: errorMessage(result.error) }));
+    } else if (
+      result.kind === "safety" &&
+      result.error instanceof EmptySideProtectionError
+    ) {
+      new Notice(
+        localize("syncFailed", {
+          reason: localize("emptySideStoppedReason"),
+        })
+      );
     }
     return false;
   }
@@ -458,6 +499,10 @@ export default class ZettlabSyncPlugin extends Plugin {
         this.settings.webdav.zettlabEndpoints?.lan
         || this.settings.webdav.zettlabEndpoints?.public
       );
+  }
+
+  hasRemotelySaveConflict(): boolean {
+    return isRemotelySaveEnabled(this.app);
   }
 
   getActiveTransport(): ObsidianDavTransport | undefined {
