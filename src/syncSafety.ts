@@ -52,7 +52,7 @@ export const getProtectedChangeAction = (
 
 export const shouldOfferSafetyOverride = (
   source: SyncTriggerSourceType
-): boolean => source === "manual";
+): boolean => source === "manual" || source === "auto_once_init";
 
 export const buildProtectModifyDetails = (
   mixedEntityMappings: Record<string, MixedEntity>,

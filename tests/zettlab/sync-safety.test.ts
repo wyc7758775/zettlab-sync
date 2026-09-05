@@ -59,10 +59,10 @@ describe("sync safety preview", () => {
     });
   });
 
-  it("offers one-time continuation only for a user-started sync", () => {
+  it("offers one-time continuation for explicit manual or bootstrap sync", () => {
     assert.equal(shouldOfferSafetyOverride("manual"), true);
     assert.equal(shouldOfferSafetyOverride("auto"), false);
-    assert.equal(shouldOfferSafetyOverride("auto_once_init"), false);
+    assert.equal(shouldOfferSafetyOverride("auto_once_init"), true);
     assert.equal(shouldOfferSafetyOverride("auto_sync_on_save"), false);
     assert.equal(shouldOfferSafetyOverride("dry"), false);
   });
