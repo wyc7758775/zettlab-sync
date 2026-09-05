@@ -13,6 +13,10 @@ import {
 } from "./manualLanSettings";
 import { obsidianDavProbeRequest } from "./obsidianDavProbe";
 import {
+  disableRemotelySave,
+  isRemotelySaveEnabled,
+} from "./pluginConflicts";
+import {
   SYNC_ON_SAVE_DELAY_MILLISECONDS,
   parseProtectModifyPercentage,
 } from "./settingsModel";
@@ -83,6 +87,46 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
     pageHeaderCopy.createEl("p", {
       text: "让当前 Obsidian 仓库与 Memo 安全、稳定地保持同步。",
     });
+
+    if (isRemotelySaveEnabled(this.app)) {
+      const conflictBanner = containerEl.createDiv({
+        cls: "zettlab-sync-conflict",
+      });
+      const conflictIcon = conflictBanner.createDiv({
+        cls: "zettlab-sync-conflict-icon",
+      });
+      setIcon(conflictIcon, "triangle-alert");
+      const conflictCopy = conflictBanner.createDiv({
+        cls: "zettlab-sync-conflict-copy",
+      });
+      conflictCopy.createEl("strong", {
+        text: localize("settingsConflictTitle"),
+      });
+      conflictCopy.createSpan({ text: localize("remotelySaveConflict") });
+      const disableButton = conflictBanner.createEl("button", {
+        cls: "zettlab-sync-action is-secondary",
+      });
+      const disableIcon = disableButton.createSpan();
+      setIcon(disableIcon, "power-off");
+      disableButton.createSpan({
+        text: localize("settingsConflictDisableAction"),
+      });
+      disableButton.addEventListener("click", () => {
+        void (async () => {
+          disableButton.disabled = true;
+          try {
+            const disabled = await disableRemotelySave(this.app);
+            new Notice(
+              localize(
+                disabled ? "remotelySaveDisabled" : "remotelySaveConflict"
+              )
+            );
+          } finally {
+            this.display();
+          }
+        })();
+      });
+    }
 
     const overview = this.plugin.getSyncOverview();
     const activeTransport = this.plugin.getActiveTransport();

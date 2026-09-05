@@ -53,6 +53,8 @@ export type MessageKey =
   | "statusSyncBlocked"
   | "remotelySaveConflict"
   | "remotelySaveDisabled"
+  | "settingsConflictTitle"
+  | "settingsConflictDisableAction"
   | "emptySideStoppedReason"
   | "safetyStoppedReason"
   | "safetyTitle"
@@ -127,6 +129,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusSyncBlocked: "Sync blocked",
     remotelySaveConflict: "Remotely Save is enabled. Disable it before using Zettlab Sync.",
     remotelySaveDisabled: "Remotely Save was disabled to prevent concurrent vault changes.",
+    settingsConflictTitle: "Sync is blocked",
+    settingsConflictDisableAction: "Disable Remotely Save",
     emptySideStoppedReason:
       "One side of the vault became empty; deletion was blocked. Restore the missing side before syncing again; deliberate clearing requires an explicit reset flow.",
     safetyStoppedReason: "{{changed}} of {{total}} files reached the {{threshold}}% safety limit",
@@ -194,6 +198,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusSyncBlocked: "同步已阻止",
     remotelySaveConflict: "检测到 Remotely Save 已启用，请先停用它，再使用 Zettlab Sync。",
     remotelySaveDisabled: "已停用 Remotely Save，避免多个同步插件同时修改仓库。",
+    settingsConflictTitle: "同步已被阻止",
+    settingsConflictDisableAction: "停用 Remotely Save",
     emptySideStoppedReason:
       "检测到一端文件突然为空，已阻止删除。请先恢复缺失的一端再同步；如需故意清空整库，应使用明确的重置流程。",
     safetyStoppedReason: "{{changed}}/{{total}} 个文件达到 {{threshold}}% 安全阈值",
@@ -261,6 +267,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     statusSyncBlocked: "同步已阻止",
     remotelySaveConflict: "偵測到 Remotely Save 已啟用，請先停用它，再使用 Zettlab Sync。",
     remotelySaveDisabled: "已停用 Remotely Save，避免多個同步插件同時修改資料庫。",
+    settingsConflictTitle: "同步已被阻止",
+    settingsConflictDisableAction: "停用 Remotely Save",
     emptySideStoppedReason:
       "偵測到一端檔案突然為空，已阻止刪除。請先恢復缺失的一端再同步；如需故意清空整庫，應使用明確的重設流程。",
     safetyStoppedReason: "{{changed}}/{{total}} 個檔案達到 {{threshold}}% 安全門檻",

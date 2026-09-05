@@ -61,6 +61,60 @@
   font-size: var(--font-ui-medium);
 }
 
+.zettlab-sync-conflict {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  margin: 0 0 1.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid
+    color-mix(in srgb, var(--color-orange) 38%, transparent);
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--color-orange) 8%,
+    var(--background-primary)
+  );
+}
+
+.zettlab-sync-conflict-icon {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--background-modifier-error-hover);
+  color: var(--color-orange);
+}
+
+.zettlab-sync-conflict-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.zettlab-sync-conflict-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.zettlab-sync-conflict-copy strong,
+.zettlab-sync-conflict-copy span {
+  display: block;
+}
+
+.zettlab-sync-conflict-copy span {
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+}
+
+.zettlab-sync-conflict .zettlab-sync-action {
+  flex: 0 0 auto;
+  min-height: 34px;
+}
+
 .zettlab-sync-dashboard {
   position: relative;
   overflow: hidden;
@@ -433,6 +487,10 @@
 }
 
 @media (max-width: 720px) {
+  .zettlab-sync-conflict {
+    flex-wrap: wrap;
+  }
+
   .zettlab-sync-status-top {
     align-items: flex-start;
   }

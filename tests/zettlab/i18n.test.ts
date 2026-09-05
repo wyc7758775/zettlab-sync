@@ -29,4 +29,18 @@ describe("Zettlab Memo notices", () => {
       "预计变更 1/2 个文件，已达到 50% 安全阈值。"
     );
   });
+
+  it("localizes the conflict banner heading and action per locale", () => {
+    assert.equal(t("settingsConflictTitle", {}, "zh-CN"), "同步已被阻止");
+    assert.equal(t("settingsConflictTitle", {}, "zh-TW"), "同步已被阻止");
+    assert.equal(t("settingsConflictTitle", {}, "en"), "Sync is blocked");
+    assert.equal(
+      t("settingsConflictDisableAction", {}, "zh-CN"),
+      "停用 Remotely Save"
+    );
+    assert.equal(
+      t("settingsConflictDisableAction", {}, "en"),
+      "Disable Remotely Save"
+    );
+  });
 });
