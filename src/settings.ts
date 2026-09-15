@@ -282,18 +282,10 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       activeTransport,
       language
     );
-    new Setting(connectionSection)
-      .setName(localize("settingsConfigMode"))
-      .setDesc(connection.modeDescription);
-    new Setting(connectionSection)
-      .setName(localize("settingsCurrentTransport"))
-      .setDesc(connection.transport);
-
     let lanDraft = connection.lanAddress;
     let setLanInputDisabled = (_disabled: boolean): void => undefined;
     new Setting(connectionSection)
       .setName(localize("settingsLanAddress"))
-      .setDesc(localize("settingsLanAddressDescription"))
       .addText((text) => {
         setLanInputDisabled = (disabled) => {
           text.setDisabled(disabled);
@@ -391,7 +383,6 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
       );
     new Setting(connectionSection)
       .setName(localize("settingsPublicAddress"))
-      .setDesc(localize("settingsPublicAddressDescription"))
       .addText((text) => {
         text
           .setPlaceholder(localize("settingsNotConfigured"))
