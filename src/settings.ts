@@ -285,6 +285,7 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
     let lanDraft = connection.lanAddress;
     let setLanInputDisabled = (_disabled: boolean): void => undefined;
     new Setting(connectionSection)
+      .setClass("zettlab-sync-lan-setting")
       .setName(localize("settingsLanAddress"))
       .addText((text) => {
         setLanInputDisabled = (disabled) => {
@@ -402,6 +403,15 @@ export class ZettlabSyncSettingTab extends PluginSettingTab {
               this.plugin.settings.webdav.password = value;
             })
           );
+      })
+      .addButton((button) => {
+        button.setIcon("eye").setTooltip("显示或隐藏密码");
+        button.onClick(() => {
+          const input = button.buttonEl.parentElement?.querySelector("input");
+          if (!(input instanceof HTMLInputElement)) return;
+          input.type = input.type === "password" ? "text" : "password";
+          button.setIcon(input.type === "password" ? "eye" : "eye-off");
+        });
       });
 
     const syncSection = createAdvancedSection(

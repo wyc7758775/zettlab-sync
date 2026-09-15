@@ -482,6 +482,15 @@
   width: min(380px, 42vw);
 }
 
+.zettlab-sync-lan-setting .setting-item-control {
+  flex-wrap: wrap;
+}
+
+.zettlab-sync-lan-setting .setting-item-control button {
+  flex-basis: 100%;
+  margin-left: 0;
+}
+
 .zettlab-sync-section-content textarea {
   min-height: 84px;
 }
